@@ -22,7 +22,7 @@
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::env;
 use std::fs::{self, File};
-use std::io::{self, Read, Seek, SeekFrom, Cursor, Write};
+use std::io::{self, Read, Seek, SeekFrom, Cursor};
 use std::path::Path;
 use std::str;
 
@@ -124,7 +124,7 @@ impl AkaiProgram {
             if let Some(tune) = &keygroup.tune {
                 // AKP level is 0-100. Let's map it to a dB range, e.g., -48dB to 0dB.
                 let volume_db = (tune.level as f32 / 100.0) * 48.0 - 48.0;
-                sfz_content.push_str(&format!("volume={:.2}\n", volume_db));
+                sfz_content.push_str(&format!("volume={volume_db:.2}\n"));
                 sfz_content.push_str(&format!("tune={}\n", tune.semitone));
                 sfz_content.push_str(&format!("fine_tune={}\n", tune.fine_tune));
             }
@@ -149,10 +149,10 @@ impl AkaiProgram {
                     }
                     // AKP 0-100 -> SFZ Hz (logarithmic scale). A more refined formula.
                     let cutoff_hz = 20.0 * (1000.0f32).powf(filter.cutoff as f32 / 100.0);
-                    sfz_content.push_str(&format!("cutoff={:.1}\n", cutoff_hz));
+                    sfz_content.push_str(&format!("cutoff={cutoff_hz:.1}\n"));
                     // AKP 0-100 -> SFZ dB, scaled to a max of 24dB.
                     let resonance_db = filter.resonance as f32 * 0.24;
-                    sfz_content.push_str(&format!("resonance={:.1}\n", resonance_db));
+                    sfz_content.push_str(&format!("resonance={resonance_db:.1}\n"));
                 }
             }
 
@@ -160,14 +160,14 @@ impl AkaiProgram {
             if let Some(lfo) = &keygroup.lfo1 {
                 // AKP 0-100 -> SFZ Hz (logarithmic scale, approx 0.1Hz to 30Hz)
                 let lfo_freq_hz = 0.1 * (300.0f32).powf(lfo.rate as f32 / 100.0);
-                sfz_content.push_str(&format!("lfo1_freq={:.2}\n", lfo_freq_hz));
+                sfz_content.push_str(&format!("lfo1_freq={lfo_freq_hz:.2}\n"));
             }
             if let Some(lfo) = &keygroup.lfo2 {
                 let lfo_freq_hz = 0.1 * (300.0f32).powf(lfo.rate as f32 / 100.0);
-                sfz_content.push_str(&format!("lfo2_freq={:.2}\n", lfo_freq_hz));
+                sfz_content.push_str(&format!("lfo2_freq={lfo_freq_hz:.2}\n"));
             }
 
-            sfz_content.push_str("\n");
+            sfz_content.push('\n');
         }
 
         sfz_content
@@ -185,7 +185,7 @@ fn main() -> io::Result<()> {
         return Ok(());
     }
     let file_path_str = &args[1];
-    println!("-> Parsing: {}", file_path_str);
+    println!("-> Parsing: {file_path_str}");
 
     let mut file = File::open(file_path_str)?;
     validate_riff_header(&mut file)?;
@@ -203,11 +203,11 @@ fn main() -> io::Result<()> {
     let input_path = Path::new(file_path_str);
     let sfz_path = input_path.with_extension("sfz");
     
-    println!("-> Saving SFZ file to: {:?}", sfz_path);
+    println!("-> Saving SFZ file to: {sfz_path:?}");
     fs::write(&sfz_path, sfz_output)?;
     
     println!("\n--- Conversion Complete ---");
-    println!("Successfully created {:?}.", sfz_path);
+    println!("Successfully created {sfz_path:?}.");
 
     Ok(())
 }
