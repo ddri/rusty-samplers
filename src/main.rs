@@ -1,11 +1,12 @@
-// Rusty Samplers: AKP to SFZ Converter - v0.8
+// Rusty Samplers: AKP to SFZ Converter - v0.9
 //
-// This version refines the parameter conversion for filter and LFO.
+// This version refines the parameter conversion for filter and LFO, and adds initial support for modulation.
 //
 // Key Changes:
 // 1. Improved filter cutoff and resonance scaling for more accurate sound.
 // 2. Added LFO rate conversion to SFZ `lfoN_freq` opcode.
-// 3. Updated version to 0.8.
+// 3. Added parsing and initial SFZ generation for the `mods` chunk.
+// 4. Updated version to 0.9.
 //
 // To compile and run this:
 // 1. Make sure you have Rust installed: https://www.rust-lang.org/tools/install
@@ -54,6 +55,7 @@ struct Keygroup {
     aux_env: Option<Envelope>,
     lfo1: Option<Lfo>,
     lfo2: Option<Lfo>,
+    mods: Vec<Modulation>,
 }
 
 #[derive(Debug, Default)]
@@ -89,6 +91,13 @@ struct Lfo {
     rate: u8,
     delay: u8,
     depth: u8,
+}
+
+#[derive(Debug, Default)]
+struct Modulation {
+    source: u8,
+    destination: u8,
+    amount: u8,
 }
 
 #[derive(Debug)]
@@ -167,6 +176,32 @@ impl AkaiProgram {
                 sfz_content.push_str(&format!("lfo2_freq={lfo_freq_hz:.2}\n"));
             }
 
+            // Modulations
+            for modulation in &keygroup.mods {
+                let sfz_source = match modulation.source {
+                    1 => "modwheel",
+                    5 => "vel",
+                    _ => "unknown_source", // Placeholder for unhandled sources
+                };
+
+                let sfz_destination = match modulation.destination {
+                    // Example mappings, these will need to be refined with a full spec
+                    // Assuming 0 is a placeholder for amp_env_attack
+                    0 => "ampeg_attack",
+                    // Assuming 1 is a placeholder for lfo1_freq
+                    1 => "lfo1_freq",
+                    _ => "unknown_destination", // Placeholder for unhandled destinations
+                };
+
+                // Scale amount from 0-100 to SFZ range (e.g., -1000 to 1000 for some parameters)
+                // This is a very basic linear scaling, will need refinement.
+                let scaled_amount = (modulation.amount as f32 - 50.0) * 20.0; // Example scaling
+
+                if sfz_source != "unknown_source" && sfz_destination != "unknown_destination" {
+                    sfz_content.push_str(&format!("{sfz_source}_to_{sfz_destination}={scaled_amount:.1}\n"));
+                }
+            }
+
             sfz_content.push('\n');
         }
 
@@ -177,7 +212,7 @@ impl AkaiProgram {
 // --- Main Application Logic ---
 
 fn main() -> io::Result<()> {
-    println!("--- Rusty Samplers: AKP to SFZ Converter v0.8 ---");
+    println!("--- Rusty Samplers: AKP to SFZ Converter v0.9 ---");
 
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
@@ -285,6 +320,9 @@ fn parse_keygroup(file: &mut File, end_pos: u64) -> io::Result<Keygroup> {
                 }
                 lfo_count += 1;
             }
+            "mods" => {
+                keygroup.mods.push(parse_mods_chunk(&mut cursor)?);
+            }
             _ => {}
         }
     }
@@ -357,4 +395,12 @@ fn parse_lfo_chunk(cursor: &mut Cursor<Vec<u8>>) -> io::Result<Lfo> {
     let delay = cursor.read_u8()?;
     let depth = cursor.read_u8()?;
     Ok(Lfo { waveform, rate, delay, depth })
+}
+
+fn parse_mods_chunk(cursor: &mut Cursor<Vec<u8>>) -> io::Result<Modulation> {
+    cursor.seek(SeekFrom::Start(1))?;
+    let source = cursor.read_u8()?;
+    let destination = cursor.read_u8()?;
+    let amount = cursor.read_u8()?;
+    Ok(Modulation { source, destination, amount })
 }
