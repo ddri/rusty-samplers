@@ -1,13 +1,11 @@
-// Rusty Samplers: AKP to SFZ Converter - v0.7
+// Rusty Samplers: AKP to SFZ Converter - v0.8
 //
-// This version marks the transition from a parser to a converter.
-// It takes the parsed data and generates a functional .sfz file.
+// This version refines the parameter conversion for filter and LFO.
 //
 // Key Changes:
-// 1. Added a `to_sfz_string()` method to generate SFZ output from the parsed data.
-// 2. Implemented mapping from AKP parameters to SFZ opcodes (e.g., key ranges, envelopes).
-// 3. Added initial scaling for values like envelope times to make the output usable.
-// 4. The main function now saves the generated SFZ content to a file.
+// 1. Improved filter cutoff and resonance scaling for more accurate sound.
+// 2. Added LFO rate conversion to SFZ `lfoN_freq` opcode.
+// 3. Updated version to 0.8.
 //
 // To compile and run this:
 // 1. Make sure you have Rust installed: https://www.rust-lang.org/tools/install
@@ -149,13 +147,24 @@ impl AkaiProgram {
                         3 => sfz_content.push_str("fil_type=hpf_2p\n"),
                         _ => {}
                     }
-                    // AKP 0-100 -> SFZ Hz (logarithmic scale)
-                    let cutoff_hz = 20.0 * (2.0f32).powf(10.0 * filter.cutoff as f32 / 100.0);
+                    // AKP 0-100 -> SFZ Hz (logarithmic scale). A more refined formula.
+                    let cutoff_hz = 20.0 * (1000.0f32).powf(filter.cutoff as f32 / 100.0);
                     sfz_content.push_str(&format!("cutoff={:.1}\n", cutoff_hz));
-                    // AKP 0-100 -> SFZ dB
-                    let resonance_db = filter.resonance as f32 * 0.4;
+                    // AKP 0-100 -> SFZ dB, scaled to a max of 24dB.
+                    let resonance_db = filter.resonance as f32 * 0.24;
                     sfz_content.push_str(&format!("resonance={:.1}\n", resonance_db));
                 }
+            }
+
+            // LFOs
+            if let Some(lfo) = &keygroup.lfo1 {
+                // AKP 0-100 -> SFZ Hz (logarithmic scale, approx 0.1Hz to 30Hz)
+                let lfo_freq_hz = 0.1 * (300.0f32).powf(lfo.rate as f32 / 100.0);
+                sfz_content.push_str(&format!("lfo1_freq={:.2}\n", lfo_freq_hz));
+            }
+            if let Some(lfo) = &keygroup.lfo2 {
+                let lfo_freq_hz = 0.1 * (300.0f32).powf(lfo.rate as f32 / 100.0);
+                sfz_content.push_str(&format!("lfo2_freq={:.2}\n", lfo_freq_hz));
             }
 
             sfz_content.push_str("\n");
@@ -168,7 +177,7 @@ impl AkaiProgram {
 // --- Main Application Logic ---
 
 fn main() -> io::Result<()> {
-    println!("--- Rusty Samplers: AKP to SFZ Converter v0.7 ---");
+    println!("--- Rusty Samplers: AKP to SFZ Converter v0.8 ---");
 
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
