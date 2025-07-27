@@ -191,7 +191,8 @@ fn main() -> io::Result<()> {
     validate_riff_header(&mut file)?;
 
     let mut program = AkaiProgram::default();
-    parse_top_level_chunks(&mut file, file.metadata()?.len(), &mut program)?;
+    let file_len = file.metadata()?.len();
+    parse_top_level_chunks(&mut file, file_len, &mut program)?;
 
     println!("-> Parsing complete.");
     
