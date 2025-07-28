@@ -1,12 +1,13 @@
-// Rusty Samplers: AKP to SFZ Converter - v0.9
+// Rusty Samplers: AKP to SFZ Converter - v1.0
 //
-// This version refines the parameter conversion for filter and LFO, and adds initial support for modulation.
+// This version significantly refines the parameter conversion for envelopes, filter, and LFO.
 //
 // Key Changes:
 // 1. Improved filter cutoff and resonance scaling for more accurate sound.
 // 2. Added LFO rate conversion to SFZ `lfoN_freq` opcode.
 // 3. Added parsing and initial SFZ generation for the `mods` chunk.
-// 4. Updated version to 0.9.
+// 4. Refined envelope (attack, decay, release) scaling to use an exponential curve for better sonic accuracy.
+// 5. Updated version to 1.0.
 //
 // To compile and run this:
 // 1. Make sure you have Rust installed: https://www.rust-lang.org/tools/install
@@ -140,11 +141,12 @@ impl AkaiProgram {
 
             // Amp Envelope
             if let Some(env) = &keygroup.amp_env {
-                // Simple scaling. AKP 0-100 -> SFZ seconds. This needs refinement.
-                sfz_content.push_str(&format!("ampeg_attack={:.3}\n", (env.attack as f32).powf(2.0) / 10000.0));
-                sfz_content.push_str(&format!("ampeg_decay={:.3}\n", (env.decay as f32).powf(2.0) / 10000.0 * 2.0));
+                // Refined exponential scaling for envelope times (Attack, Decay, Release)
+                // Akai 0-100 -> SFZ seconds. These formulas aim for a more musical response.
+                sfz_content.push_str(&format!("ampeg_attack={:.3}\n", (env.attack as f32 / 100.0 * 5.0).exp() * 0.01));
+                sfz_content.push_str(&format!("ampeg_decay={:.3}\n", (env.decay as f32 / 100.0 * 5.0).exp() * 0.01));
                 sfz_content.push_str(&format!("ampeg_sustain={}\n", env.sustain));
-                sfz_content.push_str(&format!("ampeg_release={:.3}\n", (env.release as f32).powf(2.0) / 10000.0 * 4.0));
+                sfz_content.push_str(&format!("ampeg_release={:.3}\n", (env.release as f32 / 100.0 * 6.0).exp() * 0.01));
             }
             
             // Filter
@@ -212,7 +214,7 @@ impl AkaiProgram {
 // --- Main Application Logic ---
 
 fn main() -> io::Result<()> {
-    println!("--- Rusty Samplers: AKP to SFZ Converter v0.9 ---");
+    println!("--- Rusty Samplers: AKP to SFZ Converter v1.0 ---");
 
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
