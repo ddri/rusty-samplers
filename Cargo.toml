@@ -15,7 +15,24 @@ binrw = "0.14"
 log = "0.4"
 env_logger = "0.11"
 
+[dev-dependencies]
+criterion = "0.5"
+
 [features]
-default = ["legacy-parser"]
+default = ["legacy-parser", "akp-plugin", "pgm-plugin"]
 legacy-parser = []
 binrw-parser = []
+
+# Plugin features for selective format support
+akp-plugin = []
+sfz-plugin = []
+pgm-plugin = []  # Future MPC2000XL support
+
+# Convenience features
+all-plugins = ["akp-plugin", "sfz-plugin", "pgm-plugin"]
+readers-only = ["akp-plugin"]
+writers-only = ["sfz-plugin"]
+
+[[bench]]
+name = "conversion_benchmarks"
+harness = false
