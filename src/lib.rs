@@ -28,7 +28,10 @@
 pub mod error;
 pub mod formats;
 pub mod conversion;
+pub mod validation;
+pub mod plugins;
 
 // Re-export commonly used types
 pub use error::{ConversionError, Result};
 pub use formats::common::*;
+pub use validation::{ParameterValidator, ValidationResults, ValidationIssue};

@@ -1,0 +1,23 @@
+# Test data
+test_data/akp_files/*
+test_output/*
+
+# Build artifacts
+target/
+gui/target/
+dist/
+node_modules/
+package-lock.json
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
