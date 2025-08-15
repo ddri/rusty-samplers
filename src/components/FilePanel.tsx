@@ -1,5 +1,6 @@
 import React, { useCallback } from 'react'
 import { Upload, FileText, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
+import { open } from '@tauri-apps/plugin-dialog'
 import { FileInfo } from '../types'
 
 interface FilePanelProps {
@@ -20,20 +21,54 @@ const FilePanel: React.FC<FilePanelProps> = ({
     e.stopPropagation()
   }, [])
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     
+    // Get file paths from the dropped files
     const droppedFiles = Array.from(e.dataTransfer.files)
-    const fileInfos: FileInfo[] = droppedFiles.map(file => ({
-      path: file.name, // In a real app, this would be the full path
-      name: file.name,
-      size: file.size,
-      format: file.name.split('.').pop()?.toUpperCase(),
-      status: 'pending'
-    }))
+    const fileInfos: FileInfo[] = []
+    
+    for (const file of droppedFiles) {
+      // In Tauri, we need to get the actual file path
+      // For now, create FileInfo with available data
+      const fileInfo: FileInfo = {
+        path: (file as any).path || file.name, // file.path in Tauri context
+        name: file.name,
+        size: file.size,
+        format: file.name.split('.').pop()?.toUpperCase(),
+        status: 'pending'
+      }
+      fileInfos.push(fileInfo)
+    }
     
     onFilesAdded(fileInfos)
+  }, [onFilesAdded])
+
+  const handleBrowseFiles = useCallback(async () => {
+    try {
+      const selectedPaths = await open({
+        multiple: true,
+        filters: [{
+          name: 'Akai Program Files',
+          extensions: ['akp']
+        }]
+      })
+      
+      if (selectedPaths && Array.isArray(selectedPaths)) {
+        const fileInfos: FileInfo[] = selectedPaths.map(path => ({
+          path: path,
+          name: path.split(/[/\\]/).pop() || path,
+          size: 0, // We'll need to get this from the backend if needed
+          format: 'AKP',
+          status: 'pending'
+        }))
+        
+        onFilesAdded(fileInfos)
+      }
+    } catch (error) {
+      console.error('Failed to open file dialog:', error)
+    }
   }, [onFilesAdded])
 
   const getStatusIcon = (status: FileInfo['status']) => {
@@ -69,6 +104,7 @@ const FilePanel: React.FC<FilePanelProps> = ({
         className="drop-zone"
         onDragOver={handleDragOver}
         onDrop={handleDrop}
+        onClick={handleBrowseFiles}
       >
         <Upload size={32} className="upload-icon" />
         <p className="drop-text">

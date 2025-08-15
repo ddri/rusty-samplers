@@ -61,14 +61,15 @@ function App() {
     
     setIsLoading(true)
     try {
-      const result: string = await invoke('start_conversion', {
-        inputPath: selectedFile.path,
-        outputPath: selectedFile.path.replace(/\.[^/.]+$/, `.${outputFormat.toLowerCase()}`),
-        format: outputFormat
+      const result = await invoke('start_conversion', {
+        filePath: selectedFile.path,
+        outputFormat: outputFormat
       })
       console.log('Conversion result:', result)
+      // TODO: Show success notification with output file path
     } catch (error) {
       console.error('Conversion failed:', error)
+      // TODO: Show error notification
     } finally {
       setIsLoading(false)
     }
