@@ -1,7 +1,23 @@
 [package]
 name = "rusty-samplers"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+
+[[bin]]
+name = "rusty-samplers-cli"
+path = "src/main.rs"
+
+[[bin]]
+name = "rusty-samplers-gui"
+path = "src/bin/simple_gui.rs"
 
 [dependencies]
 byteorder = "1.4"
+indicatif = "0.17"
+eframe = "0.28"
+egui = "0.28"
+rfd = "0.14"
+tokio = { version = "1.0", features = ["full"] }
+
+[dev-dependencies]
+tempfile = "3.8"
