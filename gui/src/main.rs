@@ -3,7 +3,6 @@ use rfd::FileDialog;
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum OutputFormat {
@@ -369,11 +368,15 @@ impl RustySamplersApp {
                 );
                 let _ = tx.send(ConversionProgress::Progress(progress_msg, i as f32 / files.len() as f32));
                 
-                // Simulate conversion work
-                thread::sleep(Duration::from_millis(1000));
+                // Convert the format enum to the library's format enum  
+                let lib_format = match format {
+                    OutputFormat::Sfz => rusty_samplers::OutputFormat::Sfz,
+                    OutputFormat::DecentSampler => rusty_samplers::OutputFormat::DecentSampler,
+                };
                 
-                // Simulate conversion logic - in reality this would call the actual AKP parser
-                let success = file_path.extension().map_or(false, |ext| ext == "akp");
+                // Perform actual AKP conversion
+                let conversion_result = rusty_samplers::convert_file(&file_path, lib_format);
+                let success = conversion_result.is_ok();
                 
                 let result = if success {
                     let output_file = if let Some(dir) = &output_dir {
@@ -390,30 +393,35 @@ impl RustySamplersApp {
                         }
                     };
                     
-                    // Simulate file writing
-                    let _content = match format {
-                        OutputFormat::Sfz => "// Generated SFZ file",
-                        OutputFormat::DecentSampler => "<?xml version=\"1.0\"?>",
+                    // Write the actual converted content
+                    let write_result = if let Ok(content) = &conversion_result {
+                        std::fs::write(&output_file, content).map_err(|e| e.to_string())
+                    } else {
+                        Err("Conversion failed".to_string())
                     };
                     
-                    // In a real implementation, we would write the actual converted content
-                    // std::fs::write(&output_file, content).unwrap_or(());
+                    let final_success = write_result.is_ok();
+                    let message = if final_success {
+                        format!("Converted to {} format", match format {
+                            OutputFormat::Sfz => "SFZ",
+                            OutputFormat::DecentSampler => "Decent Sampler",
+                        })
+                    } else {
+                        write_result.err().unwrap_or_else(|| "Unknown error".to_string())
+                    };
                     
                     ConversionResult {
                         input_file: file_path.clone(),
-                        output_file: Some(output_file),
-                        success: true,
-                        message: format!("Converted to {} format", match format {
-                            OutputFormat::Sfz => "SFZ",
-                            OutputFormat::DecentSampler => "Decent Sampler",
-                        }),
+                        output_file: if final_success { Some(output_file) } else { None },
+                        success: final_success,
+                        message,
                     }
                 } else {
                     ConversionResult {
                         input_file: file_path.clone(),
                         output_file: None,
                         success: false,
-                        message: "Invalid file format or extension".to_string(),
+                        message: conversion_result.err().unwrap_or_else(|| "Unknown conversion error".to_string()),
                     }
                 };
                 
