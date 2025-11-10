@@ -442,7 +442,7 @@ fn main() -> Result<(), eframe::Error> {
             .with_inner_size([900.0, 700.0])
             .with_min_inner_size([600.0, 500.0])
             .with_title("Rusty Samplers - Multi-Format Converter")
-            .with_icon(eframe::IconData {
+            .with_icon(egui::IconData {
                 rgba: vec![0; 32 * 32 * 4], // Placeholder icon
                 width: 32,
                 height: 32,
@@ -456,7 +456,7 @@ fn main() -> Result<(), eframe::Error> {
         Box::new(|cc| {
             // Set up custom font if needed
             cc.egui_ctx.set_visuals(egui::Visuals::dark());
-            Box::new(RustySamplersApp::default())
+            Ok(Box::new(RustySamplersApp::default()))
         }),
     )
 }
