@@ -40,6 +40,7 @@ pub struct RustySamplersApp {
 pub enum ConversionProgress {
     Started(String),
     Progress(String, f32),
+    FileResult(ConversionResult),
     Completed(String),
     Error(String),
 }
@@ -65,6 +66,9 @@ impl eframe::App for RustySamplersApp {
                     ConversionProgress::Progress(msg, _) => {
                         self.conversion_status = msg;
                     }
+                    ConversionProgress::FileResult(result) => {
+                        self.conversion_results.push(result);
+                    }
                     ConversionProgress::Completed(msg) => {
                         self.conversion_status = msg;
                         self.is_converting = false;
@@ -76,6 +80,19 @@ impl eframe::App for RustySamplersApp {
                 }
             }
         }
+
+        // Handle drag & drop
+        ctx.input(|i| {
+            for file in &i.raw.dropped_files {
+                if let Some(path) = &file.path {
+                    if path.extension().and_then(|e| e.to_str()) == Some("akp") {
+                        if !self.selected_files.contains(path) {
+                            self.selected_files.push(path.clone());
+                        }
+                    }
+                }
+            }
+        });
 
         // Menu bar
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
@@ -146,6 +163,7 @@ impl eframe::App for RustySamplersApp {
                 
                 if !self.selected_files.is_empty() {
                     ui.separator();
+                    let mut remove_index = None;
                     egui::ScrollArea::vertical().max_height(100.0).show(ui, |ui| {
                         for (i, file) in self.selected_files.iter().enumerate() {
                             ui.horizontal(|ui| {
@@ -153,12 +171,15 @@ impl eframe::App for RustySamplersApp {
                                 ui.label(file.file_name().unwrap().to_string_lossy());
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                     if ui.small_button("❌").clicked() {
-                                        // File removal handled outside closure
+                                        remove_index = Some(i);
                                     }
                                 });
                             });
                         }
                     });
+                    if let Some(i) = remove_index {
+                        self.selected_files.remove(i);
+                    }
                 }
             });
             
@@ -359,7 +380,8 @@ impl RustySamplersApp {
         
         thread::spawn(move || {
             let _ = tx.send(ConversionProgress::Started("🚀 Starting conversion...".to_string()));
-            
+            let mut success_count = 0usize;
+
             for (i, file_path) in files.iter().enumerate() {
                 let progress_msg = format!("🔄 Converting {} ({}/{})", 
                     file_path.file_name().unwrap().to_string_lossy(),
@@ -425,17 +447,18 @@ impl RustySamplersApp {
                     }
                 };
                 
-                // In a real implementation, results would be sent to UI
-                
-                let status_msg = if success {
+                let file_success = result.success;
+                let _ = tx.send(ConversionProgress::FileResult(result));
+
+                let status_msg = if file_success {
                     format!("✅ Converted {}", file_path.file_name().unwrap().to_string_lossy())
                 } else {
                     format!("❌ Failed to convert {}", file_path.file_name().unwrap().to_string_lossy())
                 };
+                if file_success { success_count += 1; }
                 let _ = tx.send(ConversionProgress::Progress(status_msg, (i + 1) as f32 / files.len() as f32));
             }
-            
-            let success_count = files.iter().filter(|f| f.extension().map_or(false, |ext| ext == "akp")).count();
+
             let total_count = files.len();
             
             let final_message = if success_count == total_count {
