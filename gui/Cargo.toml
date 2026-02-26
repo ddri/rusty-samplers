@@ -7,3 +7,4 @@ edition = "2021"
 eframe = "0.28"
 egui = "0.28"
 rfd = "0.14"
+rusty-samplers = { path = ".." }

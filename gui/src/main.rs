@@ -3,7 +3,6 @@ use rfd::FileDialog;
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum OutputFormat {
@@ -41,6 +40,7 @@ pub struct RustySamplersApp {
 pub enum ConversionProgress {
     Started(String),
     Progress(String, f32),
+    FileResult(ConversionResult),
     Completed(String),
     Error(String),
 }
@@ -66,6 +66,9 @@ impl eframe::App for RustySamplersApp {
                     ConversionProgress::Progress(msg, _) => {
                         self.conversion_status = msg;
                     }
+                    ConversionProgress::FileResult(result) => {
+                        self.conversion_results.push(result);
+                    }
                     ConversionProgress::Completed(msg) => {
                         self.conversion_status = msg;
                         self.is_converting = false;
@@ -77,6 +80,19 @@ impl eframe::App for RustySamplersApp {
                 }
             }
         }
+
+        // Handle drag & drop
+        ctx.input(|i| {
+            for file in &i.raw.dropped_files {
+                if let Some(path) = &file.path {
+                    if path.extension().and_then(|e| e.to_str()) == Some("akp") {
+                        if !self.selected_files.contains(path) {
+                            self.selected_files.push(path.clone());
+                        }
+                    }
+                }
+            }
+        });
 
         // Menu bar
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
@@ -147,6 +163,7 @@ impl eframe::App for RustySamplersApp {
                 
                 if !self.selected_files.is_empty() {
                     ui.separator();
+                    let mut remove_index = None;
                     egui::ScrollArea::vertical().max_height(100.0).show(ui, |ui| {
                         for (i, file) in self.selected_files.iter().enumerate() {
                             ui.horizontal(|ui| {
@@ -154,12 +171,15 @@ impl eframe::App for RustySamplersApp {
                                 ui.label(file.file_name().unwrap().to_string_lossy());
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                     if ui.small_button("❌").clicked() {
-                                        // File removal handled outside closure
+                                        remove_index = Some(i);
                                     }
                                 });
                             });
                         }
                     });
+                    if let Some(i) = remove_index {
+                        self.selected_files.remove(i);
+                    }
                 }
             });
             
@@ -360,7 +380,8 @@ impl RustySamplersApp {
         
         thread::spawn(move || {
             let _ = tx.send(ConversionProgress::Started("🚀 Starting conversion...".to_string()));
-            
+            let mut success_count = 0usize;
+
             for (i, file_path) in files.iter().enumerate() {
                 let progress_msg = format!("🔄 Converting {} ({}/{})", 
                     file_path.file_name().unwrap().to_string_lossy(),
@@ -369,11 +390,15 @@ impl RustySamplersApp {
                 );
                 let _ = tx.send(ConversionProgress::Progress(progress_msg, i as f32 / files.len() as f32));
                 
-                // Simulate conversion work
-                thread::sleep(Duration::from_millis(1000));
+                // Convert the format enum to the library's format enum  
+                let lib_format = match format {
+                    OutputFormat::Sfz => rusty_samplers::OutputFormat::Sfz,
+                    OutputFormat::DecentSampler => rusty_samplers::OutputFormat::DecentSampler,
+                };
                 
-                // Simulate conversion logic - in reality this would call the actual AKP parser
-                let success = file_path.extension().map_or(false, |ext| ext == "akp");
+                // Perform actual AKP conversion
+                let conversion_result = rusty_samplers::convert_file(&file_path, lib_format);
+                let success = conversion_result.is_ok();
                 
                 let result = if success {
                     let output_file = if let Some(dir) = &output_dir {
@@ -390,44 +415,50 @@ impl RustySamplersApp {
                         }
                     };
                     
-                    // Simulate file writing
-                    let _content = match format {
-                        OutputFormat::Sfz => "// Generated SFZ file",
-                        OutputFormat::DecentSampler => "<?xml version=\"1.0\"?>",
+                    // Write the actual converted content
+                    let write_result = if let Ok(content) = &conversion_result {
+                        std::fs::write(&output_file, content).map_err(|e| e.to_string())
+                    } else {
+                        Err("Conversion failed".to_string())
                     };
                     
-                    // In a real implementation, we would write the actual converted content
-                    // std::fs::write(&output_file, content).unwrap_or(());
+                    let final_success = write_result.is_ok();
+                    let message = if final_success {
+                        format!("Converted to {} format", match format {
+                            OutputFormat::Sfz => "SFZ",
+                            OutputFormat::DecentSampler => "Decent Sampler",
+                        })
+                    } else {
+                        write_result.err().unwrap_or_else(|| "Unknown error".to_string())
+                    };
                     
                     ConversionResult {
                         input_file: file_path.clone(),
-                        output_file: Some(output_file),
-                        success: true,
-                        message: format!("Converted to {} format", match format {
-                            OutputFormat::Sfz => "SFZ",
-                            OutputFormat::DecentSampler => "Decent Sampler",
-                        }),
+                        output_file: if final_success { Some(output_file) } else { None },
+                        success: final_success,
+                        message,
                     }
                 } else {
                     ConversionResult {
                         input_file: file_path.clone(),
                         output_file: None,
                         success: false,
-                        message: "Invalid file format or extension".to_string(),
+                        message: conversion_result.err().unwrap_or_else(|| "Unknown conversion error".to_string()),
                     }
                 };
                 
-                // In a real implementation, results would be sent to UI
-                
-                let status_msg = if success {
+                let file_success = result.success;
+                let _ = tx.send(ConversionProgress::FileResult(result));
+
+                let status_msg = if file_success {
                     format!("✅ Converted {}", file_path.file_name().unwrap().to_string_lossy())
                 } else {
                     format!("❌ Failed to convert {}", file_path.file_name().unwrap().to_string_lossy())
                 };
+                if file_success { success_count += 1; }
                 let _ = tx.send(ConversionProgress::Progress(status_msg, (i + 1) as f32 / files.len() as f32));
             }
-            
-            let success_count = files.iter().filter(|f| f.extension().map_or(false, |ext| ext == "akp")).count();
+
             let total_count = files.len();
             
             let final_message = if success_count == total_count {
