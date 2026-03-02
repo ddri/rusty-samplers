@@ -33,7 +33,7 @@ fn main() -> Result<()> {
                 }
                 _ => {
                     if let Err(e) = run_conversion(arg, OutputFormat::Sfz) {
-                        eprintln!("Error: {}", e);
+                        eprintln!("Error: {e}");
                         std::process::exit(1);
                     }
                 }
@@ -46,7 +46,7 @@ fn main() -> Result<()> {
             match first_arg.as_str() {
                 "--batch" | "-b" => {
                     if let Err(e) = run_batch_conversion(second_arg, OutputFormat::Sfz) {
-                        eprintln!("Batch Error: {}", e);
+                        eprintln!("Batch Error: {e}");
                         std::process::exit(1);
                     }
                 }
@@ -68,7 +68,7 @@ fn main() -> Result<()> {
             if first_arg == "--format" {
                 let format = parse_format(second_arg)?;
                 if let Err(e) = run_conversion(third_arg, format) {
-                    eprintln!("Error: {}", e);
+                    eprintln!("Error: {e}");
                     std::process::exit(1);
                 }
             } else {
@@ -85,7 +85,7 @@ fn main() -> Result<()> {
             if first_arg == "--batch" && second_arg == "--format" {
                 let format = parse_format(third_arg)?;
                 if let Err(e) = run_batch_conversion(fourth_arg, format) {
-                    eprintln!("Batch Error: {}", e);
+                    eprintln!("Batch Error: {e}");
                     std::process::exit(1);
                 }
             } else {
@@ -145,14 +145,14 @@ fn run_batch_conversion(directory: &str, format: OutputFormat) -> Result<()> {
     if !dir_path.exists() {
         return Err(AkpError::Io(io::Error::new(
             io::ErrorKind::NotFound,
-            format!("Directory '{}' not found", directory)
+            format!("Directory '{directory}' not found")
         )));
     }
 
     if !dir_path.is_dir() {
         return Err(AkpError::Io(io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("'{}' is not a directory", directory)
+            format!("'{directory}' is not a directory")
         )));
     }
 
@@ -166,7 +166,7 @@ fn run_batch_conversion(directory: &str, format: OutputFormat) -> Result<()> {
     }
 
     if akp_files.is_empty() {
-        println!("No .akp files found in directory: {}", directory);
+        println!("No .akp files found in directory: {directory}");
         return Ok(());
     }
 
@@ -184,20 +184,20 @@ fn run_batch_conversion(directory: &str, format: OutputFormat) -> Result<()> {
     let mut error_count = 0;
     let mut errors = Vec::new();
 
-    for (_i, akp_file) in akp_files.iter().enumerate() {
+    for akp_file in &akp_files {
         let file_name = akp_file.file_name().unwrap().to_string_lossy();
-        batch_progress.set_message(format!("Processing {}", file_name));
+        batch_progress.set_message(format!("Processing {file_name}"));
 
         match run_conversion(&akp_file.to_string_lossy(), format) {
             Ok(()) => {
                 success_count += 1;
-                batch_progress.println(format!("OK: {}", file_name));
+                batch_progress.println(format!("OK: {file_name}"));
             }
             Err(e) => {
                 error_count += 1;
-                let error_msg = format!("{}: {}", file_name, e);
+                let error_msg = format!("{file_name}: {e}");
                 errors.push(error_msg.clone());
-                batch_progress.println(format!("FAIL: {}", error_msg));
+                batch_progress.println(format!("FAIL: {error_msg}"));
             }
         }
 
@@ -208,15 +208,15 @@ fn run_batch_conversion(directory: &str, format: OutputFormat) -> Result<()> {
 
     println!();
     println!("BATCH SUMMARY:");
-    println!("   Successful: {}", success_count);
-    println!("   Failed:     {}", error_count);
+    println!("   Successful: {success_count}");
+    println!("   Failed:     {error_count}");
     println!("   Total:      {}", akp_files.len());
 
     if !errors.is_empty() {
         println!();
         println!("ERRORS:");
         for error in &errors {
-            println!("   - {}", error);
+            println!("   - {error}");
         }
     }
 
@@ -227,7 +227,7 @@ fn run_conversion(file_path_str: &str, format: OutputFormat) -> Result<()> {
     if !Path::new(file_path_str).exists() {
         return Err(AkpError::Io(io::Error::new(
             io::ErrorKind::NotFound,
-            format!("File '{}' not found", file_path_str)
+            format!("File '{file_path_str}' not found")
         )));
     }
 
@@ -265,7 +265,7 @@ fn run_conversion(file_path_str: &str, format: OutputFormat) -> Result<()> {
         OutputFormat::DecentSampler => "Decent Sampler",
     };
 
-    println!("-> Generating {} content...", format_name);
+    println!("-> Generating {format_name} content...");
     let (output_content, file_extension) = match format {
         OutputFormat::Sfz => (program.to_sfz_string(), "sfz"),
         OutputFormat::DecentSampler => (program.to_dspreset_string(), "dspreset"),
@@ -274,11 +274,11 @@ fn run_conversion(file_path_str: &str, format: OutputFormat) -> Result<()> {
     let input_path = Path::new(file_path_str);
     let output_path = input_path.with_extension(file_extension);
 
-    println!("-> Saving {} file to: {:?}", format_name, output_path);
+    println!("-> Saving {format_name} file to: {output_path:?}");
     fs::write(&output_path, output_content)?;
 
     println!("\n--- Conversion Complete ---");
-    println!("Successfully created {:?}.", output_path);
+    println!("Successfully created {output_path:?}.");
 
     Ok(())
 }

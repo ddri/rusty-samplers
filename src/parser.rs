@@ -34,7 +34,7 @@ pub fn parse_top_level_chunks(file: &mut File, end_pos: u64, program: &mut AkaiP
 
     while file.stream_position()? < end_pos {
         let current_pos = file.stream_position()?;
-        let progress_percent = ((current_pos * 30) / end_pos) as u64;
+        let progress_percent = (current_pos * 30) / end_pos;
         if processed != progress_percent {
             progress.set_position(20 + progress_percent);
             processed = progress_percent;
@@ -55,10 +55,9 @@ pub fn parse_top_level_chunks(file: &mut File, end_pos: u64, program: &mut AkaiP
                 if header.size == 0 {
                     return Err(AkpError::InvalidChunkSize("kgrp".to_string(), header.size));
                 }
-                let _msg = format!("Parsing keygroup {}...", program.keygroups.len() + 1);
                 progress.set_message("Parsing keygroup...");
                 let kgrp_end_pos = file.stream_position()? + header.size as u64;
-                let keygroup = parse_keygroup(file, kgrp_end_pos)?;
+                let keygroup = parse_keygroup(file, kgrp_end_pos, progress)?;
                 program.keygroups.push(keygroup);
             }
             _ => {
@@ -70,7 +69,7 @@ pub fn parse_top_level_chunks(file: &mut File, end_pos: u64, program: &mut AkaiP
     Ok(())
 }
 
-fn parse_keygroup(file: &mut File, end_pos: u64) -> Result<Keygroup> {
+fn parse_keygroup(file: &mut File, end_pos: u64, progress: &ProgressBar) -> Result<Keygroup> {
     let mut keygroup = Keygroup::default();
     let mut env_count = 0;
     let mut lfo_count = 0;
@@ -138,7 +137,7 @@ fn parse_keygroup(file: &mut File, end_pos: u64) -> Result<Keygroup> {
                 keygroup.mods.push(parse_mods_chunk(&mut cursor)?);
             }
             _ => {
-                println!("Warning: Skipping unknown keygroup chunk type '{}'", header.id);
+                progress.println(format!("Warning: Skipping unknown keygroup chunk type '{}'", header.id));
             }
         }
     }
@@ -157,7 +156,7 @@ fn parse_program_header(cursor: &mut Cursor<Vec<u8>>) -> Result<ProgramHeader> {
     cursor.seek(SeekFrom::Start(1))?;
     let midi_program_number = cursor.read_u8()?;
     let number_of_keygroups = cursor.read_u8()?;
-    Ok(ProgramHeader { _midi_program_number: midi_program_number, _number_of_keygroups: number_of_keygroups })
+    Ok(ProgramHeader { midi_program_number, number_of_keygroups })
 }
 
 pub fn parse_zone_chunk(cursor: &mut Cursor<Vec<u8>>, keygroup: &mut Keygroup) -> Result<()> {
@@ -236,7 +235,7 @@ pub fn parse_lfo_chunk(cursor: &mut Cursor<Vec<u8>>) -> Result<Lfo> {
     let rate = cursor.read_u8()?;
     let delay = cursor.read_u8()?;
     let depth = cursor.read_u8()?;
-    Ok(Lfo { waveform, rate, delay, _depth: depth })
+    Ok(Lfo { waveform, rate, delay, depth })
 }
 
 pub fn parse_mods_chunk(cursor: &mut Cursor<Vec<u8>>) -> Result<Modulation> {

@@ -15,15 +15,12 @@ impl AkaiProgram {
             }
 
             // Key/Velocity Range
-            sfz_content.push_str(&format!("lokey={}\n", keygroup.low_key));
-            sfz_content.push_str(&format!("hikey={}\n", keygroup.high_key));
-            sfz_content.push_str(&format!("lovel={}\n", keygroup.low_vel));
-            sfz_content.push_str(&format!("hivel={}\n", keygroup.high_vel));
+            sfz_content.push_str(&format!("lokey={}\nhikey={}\nlovel={}\nhivel={}\n",
+                keygroup.low_key, keygroup.high_key, keygroup.low_vel, keygroup.high_vel));
 
             // Tune/Level
             if let Some(tune) = &keygroup.tune {
-                let volume_db = (tune.level as f32 / 100.0) * 66.0 - 60.0;
-                sfz_content.push_str(&format!("volume={volume_db:.2}\n"));
+                sfz_content.push_str(&format!("volume={:.2}\n", tune.volume_db()));
                 sfz_content.push_str(&format!("tune={}\n", tune.semitone));
                 sfz_content.push_str(&format!("fine_tune={}\n", tune.fine_tune));
                 sfz_content.push_str("amp_veltrack=100\n");
@@ -31,14 +28,10 @@ impl AkaiProgram {
 
             // Amp Envelope
             if let Some(env) = &keygroup.amp_env {
-                let attack_time = if env.attack == 0 { 0.0 } else { (env.attack as f32 / 100.0 * 4.0).exp() * 0.001 };
-                let decay_time = if env.decay == 0 { 0.0 } else { (env.decay as f32 / 100.0 * 4.0).exp() * 0.001 };
-                let release_time = if env.release == 0 { 0.001 } else { (env.release as f32 / 100.0 * 5.0).exp() * 0.001 };
-
-                sfz_content.push_str(&format!("ampeg_attack={attack_time:.3}\n"));
-                sfz_content.push_str(&format!("ampeg_decay={decay_time:.3}\n"));
+                sfz_content.push_str(&format!("ampeg_attack={:.3}\n", env.attack_time()));
+                sfz_content.push_str(&format!("ampeg_decay={:.3}\n", env.decay_time()));
                 sfz_content.push_str(&format!("ampeg_sustain={}\n", env.sustain));
-                sfz_content.push_str(&format!("ampeg_release={release_time:.3}\n"));
+                sfz_content.push_str(&format!("ampeg_release={:.3}\n", env.release_time()));
 
                 if env.attack > 10 {
                     sfz_content.push_str("ampeg_vel2attack=-20\n");
@@ -84,45 +77,31 @@ impl AkaiProgram {
 
             // LFOs
             if let Some(lfo) = &keygroup.lfo1 {
-                let lfo_freq_hz = 0.1 * (300.0f32).powf(lfo.rate as f32 / 100.0);
-                sfz_content.push_str(&format!("lfo1_freq={lfo_freq_hz:.2}\n"));
+                sfz_content.push_str(&format!("lfo1_freq={:.2}\n", lfo.rate_hz()));
+                sfz_content.push_str(&format!("lfo1_wave={}\n", lfo.waveform_name()));
 
-                let waveform = match lfo.waveform {
-                    0 => "triangle",
-                    1 => "sine",
-                    2 => "square",
-                    3 => "saw",
-                    4 => "ramp",
-                    5 => "random",
-                    _ => "triangle"
-                };
-                sfz_content.push_str(&format!("lfo1_wave={}\n", waveform));
+                if lfo.depth > 0 {
+                    let depth_cents = lfo.depth_normalized() * 100.0;
+                    sfz_content.push_str(&format!("lfo1_pitch={depth_cents:.1}\n"));
+                }
 
                 if lfo.delay > 0 {
                     let delay_time = (lfo.delay as f32 / 100.0) * 10.0;
                     sfz_content.push_str(&format!("lfo1_delay={delay_time:.2}\n"));
-                }
 
-                if lfo.delay > 0 {
                     let fade_time = (lfo.delay as f32 / 100.0) * 5.0;
                     sfz_content.push_str(&format!("lfo1_fade={fade_time:.2}\n"));
                 }
             }
 
             if let Some(lfo) = &keygroup.lfo2 {
-                let lfo_freq_hz = 0.1 * (300.0f32).powf(lfo.rate as f32 / 100.0);
-                sfz_content.push_str(&format!("lfo2_freq={lfo_freq_hz:.2}\n"));
+                sfz_content.push_str(&format!("lfo2_freq={:.2}\n", lfo.rate_hz()));
+                sfz_content.push_str(&format!("lfo2_wave={}\n", lfo.waveform_name()));
 
-                let waveform = match lfo.waveform {
-                    0 => "triangle",
-                    1 => "sine",
-                    2 => "square",
-                    3 => "saw",
-                    4 => "ramp",
-                    5 => "random",
-                    _ => "triangle"
-                };
-                sfz_content.push_str(&format!("lfo2_wave={}\n", waveform));
+                if lfo.depth > 0 {
+                    let depth_cents = lfo.depth_normalized() * 100.0;
+                    sfz_content.push_str(&format!("lfo2_pitch={depth_cents:.1}\n"));
+                }
 
                 if lfo.delay > 0 {
                     let delay_time = (lfo.delay as f32 / 100.0) * 10.0;
@@ -183,8 +162,6 @@ impl AkaiProgram {
             // Additional common SFZ opcodes
             if keygroup.sample.is_some() {
                 sfz_content.push_str("loop_mode=loop_continuous\n");
-                sfz_content.push_str("loop_start=0\n");
-                sfz_content.push_str("loop_end=0\n");
             }
 
             sfz_content.push_str("polyphony=64\n");
@@ -301,13 +278,15 @@ mod tests {
             waveform: 0,
             rate: 30,
             delay: 0,
-            _depth: 50,
+            depth: 50,
         });
 
         program.keygroups.push(keygroup);
 
         let sfz = program.to_sfz_string();
         assert!(sfz.contains("lfo1_freq="));
+        assert!(sfz.contains("lfo1_wave=triangle"));
+        assert!(sfz.contains("lfo1_pitch=50.0")); // depth 50 -> 0.5 * 100 = 50 cents
     }
 
     #[test]
@@ -353,5 +332,18 @@ mod tests {
 
         let sfz = program.to_sfz_string();
         assert!(sfz.contains("resonance=6.0")); // (15/100) * 40 = 6.0
+    }
+
+    #[test]
+    fn test_sfz_no_zero_length_loop() {
+        let mut program = AkaiProgram::default();
+        let mut keygroup = Keygroup::default();
+        keygroup.sample = Some(Sample { filename: "test.wav".to_string() });
+        program.keygroups.push(keygroup);
+
+        let sfz = program.to_sfz_string();
+        assert!(sfz.contains("loop_mode=loop_continuous"));
+        assert!(!sfz.contains("loop_start=0"));
+        assert!(!sfz.contains("loop_end=0"));
     }
 }

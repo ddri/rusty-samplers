@@ -19,16 +19,16 @@ pub enum AkpError {
 impl fmt::Display for AkpError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AkpError::Io(err) => write!(f, "I/O error: {}", err),
+            AkpError::Io(err) => write!(f, "I/O error: {err}"),
             AkpError::InvalidRiffHeader => write!(f, "Invalid file format: Expected RIFF header but found different signature"),
             AkpError::InvalidAprgSignature => write!(f, "Invalid file format: Expected APRG signature but found different signature (not an Akai program file)"),
-            AkpError::UnknownChunkType(chunk) => write!(f, "Unknown chunk type '{}' encountered", chunk),
-            AkpError::InvalidChunkSize(chunk, size) => write!(f, "Invalid size {} for chunk '{}'", size, chunk),
-            AkpError::CorruptedChunk(chunk, reason) => write!(f, "Corrupted '{}' chunk: {}", chunk, reason),
-            AkpError::InvalidKeyRange(low, high) => write!(f, "Invalid key range: low_key ({}) must be <= high_key ({})", low, high),
-            AkpError::InvalidVelocityRange(low, high) => write!(f, "Invalid velocity range: low_vel ({}) must be <= high_vel ({})", low, high),
-            AkpError::MissingRequiredChunk(chunk) => write!(f, "Missing required '{}' chunk", chunk),
-            AkpError::InvalidParameterValue(param, value) => write!(f, "Invalid value {} for parameter '{}'", value, param),
+            AkpError::UnknownChunkType(chunk) => write!(f, "Unknown chunk type '{chunk}' encountered"),
+            AkpError::InvalidChunkSize(chunk, size) => write!(f, "Invalid size {size} for chunk '{chunk}'"),
+            AkpError::CorruptedChunk(chunk, reason) => write!(f, "Corrupted '{chunk}' chunk: {reason}"),
+            AkpError::InvalidKeyRange(low, high) => write!(f, "Invalid key range: low_key ({low}) must be <= high_key ({high})"),
+            AkpError::InvalidVelocityRange(low, high) => write!(f, "Invalid velocity range: low_vel ({low}) must be <= high_vel ({high})"),
+            AkpError::MissingRequiredChunk(chunk) => write!(f, "Missing required '{chunk}' chunk"),
+            AkpError::InvalidParameterValue(param, value) => write!(f, "Invalid value {value} for parameter '{param}'"),
         }
     }
 }

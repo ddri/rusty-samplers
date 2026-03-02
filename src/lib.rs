@@ -16,16 +16,16 @@ pub fn convert_file(input_path: &Path, format: OutputFormat) -> std::result::Res
     use std::fs::File;
 
     let mut file = File::open(input_path)
-        .map_err(|e| format!("Failed to open file: {}", e))?;
+        .map_err(|e| format!("Failed to open file: {e}"))?;
 
     validate_riff_header(&mut file)
-        .map_err(|e| format!("Invalid AKP file: {}", e))?;
+        .map_err(|e| format!("Invalid AKP file: {e}"))?;
 
     let file_size = file.metadata()
-        .map_err(|e| format!("Failed to read file size: {}", e))?.len();
+        .map_err(|e| format!("Failed to read file size: {e}"))?.len();
 
     file.seek(SeekFrom::Current(4))
-        .map_err(|e| format!("Failed to seek past RIFF header: {}", e))?;
+        .map_err(|e| format!("Failed to seek past RIFF header: {e}"))?;
 
     let end_pos = file_size;
 
@@ -33,7 +33,7 @@ pub fn convert_file(input_path: &Path, format: OutputFormat) -> std::result::Res
     let progress = indicatif::ProgressBar::hidden();
 
     parse_top_level_chunks(&mut file, end_pos, &mut program, &progress)
-        .map_err(|e| format!("Failed to parse AKP chunks: {}", e))?;
+        .map_err(|e| format!("Failed to parse AKP chunks: {e}"))?;
 
     let output = match format {
         OutputFormat::Sfz => program.to_sfz_string(),

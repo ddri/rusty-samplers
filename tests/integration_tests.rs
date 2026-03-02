@@ -1,9 +1,18 @@
 use std::fs::File;
 use std::io::Write;
+use std::path::PathBuf;
 use std::process::Command;
 use tempfile::TempDir;
 
-fn create_test_riff_file(temp_dir: &TempDir, content: &[u8]) -> std::path::PathBuf {
+fn cli_binary() -> PathBuf {
+    // Use the binary built by `cargo test`, avoiding nested cargo invocations
+    // that deadlock on the build directory lock.
+    let path = PathBuf::from(env!("CARGO_BIN_EXE_rusty-samplers-cli"));
+    assert!(path.exists(), "CLI binary not found at {path:?}");
+    path
+}
+
+fn create_test_riff_file(temp_dir: &TempDir, content: &[u8]) -> PathBuf {
     let file_path = temp_dir.path().join("test.akp");
     let mut file = File::create(&file_path).unwrap();
     file.write_all(content).unwrap();
@@ -15,12 +24,8 @@ fn test_invalid_riff_header() {
     let temp_dir = TempDir::new().unwrap();
     let file_path = create_test_riff_file(&temp_dir, b"INVALID_HEADER");
 
-    let output = Command::new("cargo")
-        .arg("run")
-        .arg("--bin")
-        .arg("rusty-samplers-cli")
-        .arg("--")
-        .arg(file_path)
+    let output = Command::new(cli_binary())
+        .arg(&file_path)
         .output()
         .expect("Failed to execute command");
 
@@ -39,12 +44,8 @@ fn test_invalid_aprg_signature() {
 
     let file_path = create_test_riff_file(&temp_dir, &content);
 
-    let output = Command::new("cargo")
-        .arg("run")
-        .arg("--bin")
-        .arg("rusty-samplers-cli")
-        .arg("--")
-        .arg(file_path)
+    let output = Command::new(cli_binary())
+        .arg(&file_path)
         .output()
         .expect("Failed to execute command");
 
@@ -55,11 +56,7 @@ fn test_invalid_aprg_signature() {
 
 #[test]
 fn test_missing_file() {
-    let output = Command::new("cargo")
-        .arg("run")
-        .arg("--bin")
-        .arg("rusty-samplers-cli")
-        .arg("--")
+    let output = Command::new(cli_binary())
         .arg("/nonexistent/file.akp")
         .output()
         .expect("Failed to execute command");
@@ -71,10 +68,7 @@ fn test_missing_file() {
 
 #[test]
 fn test_no_arguments() {
-    let output = Command::new("cargo")
-        .arg("run")
-        .arg("--bin")
-        .arg("rusty-samplers-cli")
+    let output = Command::new(cli_binary())
         .output()
         .expect("Failed to execute command");
 
@@ -93,12 +87,8 @@ fn test_valid_riff_but_empty_program() {
 
     let file_path = create_test_riff_file(&temp_dir, &content);
 
-    let output = Command::new("cargo")
-        .arg("run")
-        .arg("--bin")
-        .arg("rusty-samplers-cli")
-        .arg("--")
-        .arg(file_path)
+    let output = Command::new(cli_binary())
+        .arg(&file_path)
         .output()
         .expect("Failed to execute command");
 

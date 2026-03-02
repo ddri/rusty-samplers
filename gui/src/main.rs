@@ -68,7 +68,7 @@ impl eframe::App for RustySamplersApp {
                         self.current_progress = 1.0;
                     }
                     ConversionProgress::Error(msg) => {
-                        self.conversion_status = format!("Error: {}", msg);
+                        self.conversion_status = format!("Error: {msg}");
                         self.is_converting = false;
                     }
                 }
@@ -79,10 +79,10 @@ impl eframe::App for RustySamplersApp {
         ctx.input(|i| {
             for file in &i.raw.dropped_files {
                 if let Some(path) = &file.path {
-                    if path.extension().and_then(|e| e.to_str()) == Some("akp") {
-                        if !self.selected_files.contains(path) {
-                            self.selected_files.push(path.clone());
-                        }
+                    if path.extension().and_then(|e| e.to_str()) == Some("akp")
+                        && !self.selected_files.contains(path)
+                    {
+                        self.selected_files.push(path.clone());
                     }
                 }
             }
@@ -248,12 +248,12 @@ impl eframe::App for RustySamplersApp {
                         self.start_conversion();
                     }
 
-                    if !self.selected_files.is_empty() {
-                        if ui.button("Clear Files").clicked() {
-                            self.selected_files.clear();
-                            self.conversion_results.clear();
-                            self.conversion_status.clear();
-                        }
+                    if !self.selected_files.is_empty()
+                        && ui.button("Clear Files").clicked()
+                    {
+                        self.selected_files.clear();
+                        self.conversion_results.clear();
+                        self.conversion_status.clear();
                     }
                 });
 
@@ -278,8 +278,9 @@ impl eframe::App for RustySamplersApp {
                     let total_count = self.conversion_results.len();
 
                     ui.horizontal(|ui| {
-                        ui.colored_label(egui::Color32::GREEN, format!("Success: {}", success_count));
-                        ui.colored_label(egui::Color32::RED, format!("Failed: {}", total_count - success_count));
+                        ui.colored_label(egui::Color32::GREEN, format!("Success: {success_count}"));
+                        let fail_count = total_count - success_count;
+                        ui.colored_label(egui::Color32::RED, format!("Failed: {fail_count}"));
                     });
 
                     ui.separator();
@@ -390,7 +391,7 @@ impl RustySamplersApp {
                 );
                 let _ = tx.send(ConversionProgress::Progress(progress_msg, i as f32 / files.len() as f32));
 
-                let conversion_result = rusty_samplers::convert_file(&file_path, format);
+                let conversion_result = rusty_samplers::convert_file(file_path, format);
                 let success = conversion_result.is_ok();
 
                 let result = if success {
@@ -454,9 +455,9 @@ impl RustySamplersApp {
             let total_count = files.len();
 
             let final_message = if success_count == total_count {
-                format!("All {} files converted successfully!", total_count)
+                format!("All {total_count} files converted successfully!")
             } else if success_count > 0 {
-                format!("{} of {} files converted successfully", success_count, total_count)
+                format!("{success_count} of {total_count} files converted successfully")
             } else {
                 "No files were converted successfully".to_string()
             };
