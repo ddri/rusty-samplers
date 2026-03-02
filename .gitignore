@@ -38,3 +38,9 @@ Thumbs.db
 
 # Generated documentation
 /doc/
+
+# Test artifacts
+test_sample.akp
+test_runner
+*.sfz
+*.dspreset
