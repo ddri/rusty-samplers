@@ -1,260 +1,170 @@
-# 🎵 Rusty Samplers
+# Rusty Samplers
 
-A powerful multi-format sampler converter that transforms Akai AKP files into modern sampler formats including SFZ and Decent Sampler XML.
+A multi-format sampler converter that transforms Akai AKP files into modern sampler formats including SFZ and Decent Sampler XML.
 
-## ✨ Features
+## Features
 
 - **Multi-Format Output**: Convert to SFZ and Decent Sampler formats
 - **Advanced Parameter Mapping**: Precise envelope, filter, and LFO conversion
-- **Modern GUI Interface**: User-friendly graphical interface with drag & drop
-- **Command Line Interface**: Powerful CLI for batch processing and scripting  
+- **GUI Interface**: Graphical interface with drag & drop and batch processing
+- **CLI**: Command-line interface for scripting and automation
 - **Comprehensive Conversion**: Handles samples, envelopes, filters, LFOs, and modulation
 - **Batch Processing**: Convert multiple files or entire directories
-- **Error Handling**: Robust error reporting and validation
-- **Progress Tracking**: Real-time conversion progress indicators
 
-## 🚀 Quick Start
+## Quick Start
 
-### GUI Application (Recommended)
-
-**✅ Fully Functional** - Run the graphical interface with complete AKP conversion:
+### GUI Application
 
 ```bash
 cd gui
 cargo run
 ```
 
-**GUI Features:**
-- **Real AKP Conversion**: Actual file parsing and generation (not simulation)
-- Drag & drop AKP files with instant format detection
-- Format selection (SFZ/Decent Sampler) with live preview descriptions
-- Batch conversion mode with progress tracking
-- Error handling with detailed feedback
-- Automatic output file generation with proper extensions
+- Drag & drop AKP files or use the file picker
+- Select output format (SFZ or Decent Sampler)
+- Batch conversion with progress tracking
+- Hover feedback on drag & drop area
 
 ### Command Line Interface
 
-**⚠️ Note**: CLI functionality is implemented as library functions but requires integration work for standalone binary.
+```bash
+# Single file conversion (default: SFZ)
+cargo run --bin rusty-samplers-cli -- my_sample.akp
 
-The conversion logic supports:
-- Single file conversion to SFZ or Decent Sampler formats
-- Batch directory processing
-- Advanced parameter mapping and error handling
-- Progress tracking and detailed logging
+# Convert to Decent Sampler format
+cargo run --bin rusty-samplers-cli -- --format ds my_sample.akp
 
-**Current Usage**: Access via GUI or integrate library functions in your own applications.
+# Batch convert a directory
+cargo run --bin rusty-samplers-cli -- --batch ./samples/
 
-## 📦 Installation
+# Batch convert to Decent Sampler
+cargo run --bin rusty-samplers-cli -- --batch --format ds ./samples/
+
+# Show help
+cargo run --bin rusty-samplers-cli -- --help
+```
+
+### Library Usage
+
+```rust
+use rusty_samplers::{convert_file, OutputFormat};
+use std::path::Path;
+
+let result = convert_file(Path::new("input.akp"), OutputFormat::Sfz);
+match result {
+    Ok(content) => println!("{}", content),
+    Err(e) => eprintln!("Error: {}", e),
+}
+```
+
+## Installation
 
 ### Prerequisites
 
 - [Rust](https://rustlang.org/tools/install) (1.70 or later)
-- Git
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/yourusername/rusty-samplers.git
+git clone https://github.com/ddri/rusty-samplers.git
 cd rusty-samplers
 
-# Build GUI version (primary application)
+# Build library + CLI
 cargo build --release
 
-# Or build and run GUI directly
-cd gui
-cargo run --release
+# Build GUI
+cd gui && cargo build --release
 ```
 
-## 🎼 Supported Formats
+## Supported Formats
 
-### Input Format
+### Input
 
 - **AKP (Akai Program)**: RIFF-based Akai sampler program files
 
-### Output Formats
+### Output
 
-#### SFZ Format
-- Standard SFZ sampler format
+#### SFZ Format (.sfz)
+- Standard text-based sampler format
 - Compatible with most modern samplers
-- Advanced parameter mapping including:
-  - Sample key/velocity mapping
-  - ADSR envelopes with exponential scaling
-  - Filter cutoff/resonance (20Hz-20kHz range)
-  - LFO modulation with waveform selection
-  - Modulation routing (18 sources, 17 destinations)
-  - Velocity tracking and dynamics
+- Sample key/velocity mapping
+- ADSR envelopes with exponential scaling
+- Filter cutoff/resonance (20Hz-20kHz logarithmic)
+- LFO modulation with waveform selection
+- Modulation routing (13 sources, 18 destinations)
+- Velocity tracking and dynamics
 
-#### Decent Sampler XML
+#### Decent Sampler XML (.dspreset)
 - Native Decent Sampler preset format
-- Complete UI integration with labeled controls
-- Advanced features including:
-  - Interactive UI controls (Attack, Decay, Sustain, Release, Filter, Resonance)
-  - Effects chain (Lowpass filter + Reverb)
-  - MIDI CC bindings (CC1, CC2, CC7)
-  - LFO modulators with waveform selection
-  - Comprehensive metadata and tagging
+- Interactive UI controls (Attack, Decay, Sustain, Release, Filter, Resonance)
+- Effects chain (Lowpass filter + Reverb)
+- MIDI CC bindings (CC1, CC2, CC7)
+- LFO modulators with waveform selection
 
-## 🛠️ Parameter Conversion
+## Parameter Conversion
 
-### Envelope Conversion
-- **Attack/Decay/Release**: Exponential scaling for musical response
-- **Sustain**: Direct level mapping
-- **Velocity Tracking**: Automatic velocity sensitivity
+| Parameter | Scaling | Range |
+|---|---|---|
+| Envelope Attack/Decay/Release | Exponential | Musical response curve |
+| Envelope Sustain | Linear | 0-100% |
+| Filter Cutoff | Logarithmic | 20Hz - 20kHz |
+| Filter Resonance | Linear | 0 - 40dB |
+| LFO Rate | Logarithmic | 0.1Hz - 30Hz |
+| Volume | Linear | -60dB - +6dB |
+| Modulation | Bipolar normalized | Per-destination scaling |
 
-### Filter Conversion  
-- **Cutoff**: Logarithmic mapping (20Hz to 20kHz)
-- **Resonance**: Scaled to appropriate dB ranges
-- **Filter Types**: Lowpass, Bandpass, Highpass support
+### Modulation Sources
+LFO1/2, Mod Wheel, Aftertouch, Key, Key Gate, Velocity, Pitch Bend, Channel Pressure, Polyphonic Pressure, Breath, Foot, Expression
 
-### LFO Conversion
-- **Rate**: Logarithmic frequency conversion (0.1Hz to 30Hz)
-- **Waveforms**: Triangle, Sine, Square, Saw, Ramp, Random
-- **Delay/Fade**: Time-based parameter conversion
+### Modulation Destinations
+Pitch, Filter Cutoff, Resonance, Volume, Pan, LFO Freq, Envelope Times, Envelope Sustain, LFO Depths
 
-### Modulation Mapping
-Comprehensive modulation routing with support for:
-- **Sources**: LFO1/2, Mod Wheel, Aftertouch, Velocity, Key, Pitch Bend
-- **Destinations**: Pitch, Filter, Volume, Pan, Envelope times, LFO parameters
+## Project Structure
 
-## 📊 Technical Details
-
-### Architecture
-- **Rust-based**: Memory-safe, high-performance conversion engine  
-- **RIFF Parser**: Comprehensive AKP chunk parsing with validation
-- **Library Architecture**: Core logic in `src/main.rs` with public API
-- **GUI Integration**: Clean separation between UI and conversion logic
-- **Error Recovery**: Graceful handling of malformed files with detailed feedback
-
-### File Structure
 ```
 rusty-samplers/
 ├── src/
-│   ├── main.rs           # Core conversion logic (public library functions)
-│   ├── lib.rs            # Library interface for GUI integration
+│   ├── lib.rs            # Library root: module declarations, re-exports, convert_file()
+│   ├── error.rs          # AkpError enum and Result type alias
+│   ├── types.rs          # Data structures and OutputFormat enum
+│   ├── parser.rs         # RIFF/APRG binary file parsing
+│   ├── sfz.rs            # SFZ format generation
+│   ├── dspreset.rs       # Decent Sampler XML generation
 │   └── bin/
-│       └── simple_gui.rs # Alternative launcher (unused)
-├── gui/                  # Primary GUI application ✅ WORKING
-│   ├── Cargo.toml       # Dependencies + rusty-samplers library
-│   └── src/main.rs      # Complete GUI with real conversion
-├── tests/                # Integration tests
-├── CLAUDE.md            # Development documentation
-└── README.md           # This file
+│       └── cli.rs        # CLI binary (rusty-samplers-cli)
+├── gui/                  # GUI application (separate crate)
+│   ├── Cargo.toml        # Depends on eframe, egui, rfd, rusty-samplers
+│   └── src/main.rs       # egui GUI with drag & drop, batch processing
+├── tests/
+│   └── integration_tests.rs
+├── examples/
+│   └── test_runner.rs    # Manual test utility
+└── create_test_akp.py    # Generate test AKP files
 ```
 
-## 🧪 Testing
-
-**Current Status**: Basic integration testing implemented
+## Testing
 
 ```bash
-# Run library tests
+# Run all tests (19 unit + 5 integration)
 cargo test
 
-# Test GUI compilation and functionality
-cd gui
-cargo run
+# Unit tests only
+cargo test --lib
+
+# Integration tests only
+cargo test --test integration_tests
 ```
 
-**Testing Coverage**:
-- ✅ Library integration (GUI ↔ Core conversion logic)
-- ✅ Compilation verification for all components
-- ✅ Error handling propagation
-- 🔄 AKP chunk parsing (needs real test files)
-- 🔄 Parameter conversion accuracy (needs validation)
-- 🔄 Output format compliance (needs verification)
+## Troubleshooting
 
-## 🐛 Troubleshooting
+**"Invalid RIFF header"** — Ensure the file is a valid AKP file, not corrupted or truncated.
 
-### Common Issues
+**"Missing required keygroup chunk"** — The AKP file may be empty or malformed.
 
-**"Invalid RIFF header"**
-- Ensure file is a valid AKP file
-- Check file isn't corrupted or truncated
+**GUI won't start** — Run from the `gui/` directory: `cd gui && cargo run`. Ensure dependencies compile with `cargo build`.
 
-**"Missing required keygroup chunk"**
-- AKP file may be empty or malformed
-- Try with a different AKP file
+**Build fails** — Update Rust (`rustup update`), then clean and rebuild (`cargo clean && cargo build`).
 
-**GUI won't start**
-- Ensure all dependencies are installed: `cargo build`
-- Try running from the `gui/` directory: `cd gui && cargo run`
-- Check that egui/eframe dependencies compiled correctly
-
-**Conversion fails in GUI**
-- Verify input files are valid AKP format (RIFF/APRG headers)
-- Check file permissions for both input and output locations
-- Review error messages in GUI results panel
-
-**Build fails**
-- Update Rust: `rustup update`
-- Clean and rebuild: `cargo clean && cargo build`
-- Ensure all dependencies are available
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our development guidelines:
-
-1. **Code Style**: Follow Rust conventions and run `cargo fmt`
-2. **Testing**: Add tests for new features
-3. **Documentation**: Update docs for API changes
-4. **Error Handling**: Use proper error types and messages
-
-### Development Setup
-
-```bash
-# Clone and setup
-git clone https://github.com/yourusername/rusty-samplers.git
-cd rusty-samplers
-
-# Install development dependencies
-cargo build
-
-# Run tests
-cargo test
-
-# Run GUI in development (primary interface)
-cd gui && cargo run
-
-# Check library integration
-cargo check
-```
-
-### Current Development Status
-- ✅ **Core Library**: Fully implemented AKP parsing and conversion
-- ✅ **GUI Application**: Complete interface with real conversion
-- ✅ **Multi-Format Support**: SFZ + Decent Sampler working  
-- 🔄 **CLI Binary**: Library functions available, needs standalone wrapper
-- 🔄 **Test Suite**: Basic integration tests, needs AKP test files
-
-## 📋 TODO / Roadmap
-
-### High Priority
-- [ ] Create standalone CLI binary wrapper
-- [ ] Comprehensive test suite with real AKP files  
-- [ ] Sample path resolution and validation
-- [ ] Performance optimization for large batch conversions
-
-### Feature Extensions  
-- [ ] Additional sampler format support (Kontakt, EXS24)
-- [ ] Advanced modulation matrix conversion
-- [ ] Preset organization and management
-- [ ] Plugin version for DAW integration
-
-### Nice to Have
-- [ ] Cloud storage integration
-- [ ] Conversion preview mode
-- [ ] Custom parameter mapping profiles
-
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🙏 Acknowledgments
-
-- Akai for the AKP format specifications
-- SFZ format community for documentation
-- Decent Sampler team for XML format details
-- Rust community for excellent tooling and libraries
-
----
-
-**Made with ❤️ in Rust**
