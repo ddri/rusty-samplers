@@ -9,6 +9,7 @@ path = "src/bin/cli.rs"
 
 [dependencies]
 byteorder = "1.4"
+clap = { version = "4", features = ["derive"] }
 indicatif = "0.17"
 
 [dev-dependencies]

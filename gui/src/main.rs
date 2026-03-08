@@ -355,9 +355,11 @@ impl RustySamplersApp {
             .set_title("Select AKP Files")
             .pick_files()
         {
-            self.selected_files = files;
-            self.conversion_results.clear();
-            self.conversion_status.clear();
+            for file in files {
+                if !self.selected_files.contains(&file) {
+                    self.selected_files.push(file);
+                }
+            }
         }
     }
 

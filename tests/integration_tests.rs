@@ -72,9 +72,9 @@ fn test_no_arguments() {
         .output()
         .expect("Failed to execute command");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Usage:"));
-    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Usage:"));
+    assert!(!output.status.success());
 }
 
 #[test]
