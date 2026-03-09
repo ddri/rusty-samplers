@@ -22,9 +22,9 @@ The library is split into focused modules under `src/`:
 
 - **Library root** (`src/lib.rs`): Module declarations, re-exports (`AkpError`, `Result`, `AkaiProgram`, `OutputFormat`, `validate_riff_header`, `parse_top_level_chunks`), and `convert_file()` convenience function for GUI integration.
 
-- **CLI binary** (`src/bin/cli.rs`): Command-line interface with single-file conversion, `--format` option, `--batch` directory mode, and progress bars via `indicatif`.
+- **CLI binary** (`src/bin/cli.rs`): Command-line interface using `clap` derive for argument parsing. Supports single-file conversion, `--format` option, `--batch` directory mode, and progress bars via `indicatif`.
 
-- **GUI application** (`gui/src/main.rs`): Separate crate using `eframe`/`egui`. Drag & drop with hover feedback, format selection using `rusty_samplers::OutputFormat` directly, batch processing, real-time progress tracking, threaded conversion.
+- **GUI application** (`gui/src/main.rs`): Separate crate using `eframe`/`egui`. Clickable drop zone with hover feedback, format selection using `rusty_samplers::OutputFormat` directly, custom output directory option, real-time progress tracking in bottom bar, threaded conversion.
 
 ## Project Structure
 
@@ -49,7 +49,7 @@ rusty-samplers/
 ├── create_test_akp.py       # Python script to generate test AKP files
 ├── CLAUDE.md
 ├── README.md
-└── Cargo.toml               # Library + CLI binary, deps: byteorder, indicatif
+└── Cargo.toml               # Library + CLI binary, deps: byteorder, clap, indicatif
 ```
 
 ## Development Commands
@@ -67,7 +67,7 @@ rusty-samplers/
 - `cd gui && cargo run`: Launch the GUI
 
 ### Test
-- `cargo test`: Run all tests (19 unit + 5 integration = 24 total)
+- `cargo test`: Run all tests (25 unit + 5 integration = 30 total)
 - `cargo test --lib`: Unit tests only
 - `cargo test --test integration_tests`: Integration tests only
 

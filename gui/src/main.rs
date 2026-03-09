@@ -6,6 +6,16 @@ use std::thread;
 
 use rusty_samplers::OutputFormat;
 
+// Color palette
+const ACCENT: egui::Color32 = egui::Color32::from_rgb(90, 140, 255);
+const ACCENT_DIM: egui::Color32 = egui::Color32::from_rgb(60, 100, 200);
+const SUCCESS: egui::Color32 = egui::Color32::from_rgb(80, 200, 120);
+const FAILURE: egui::Color32 = egui::Color32::from_rgb(240, 80, 80);
+const MUTED: egui::Color32 = egui::Color32::from_rgb(140, 140, 150);
+const SECTION_LABEL: egui::Color32 = egui::Color32::from_rgb(200, 200, 210);
+const DROP_BG: egui::Color32 = egui::Color32::from_rgb(30, 32, 40);
+const DROP_HOVER_BG: egui::Color32 = egui::Color32::from_rgb(35, 40, 60);
+
 #[derive(Default)]
 pub struct RustySamplersApp {
     // File selection
@@ -42,6 +52,11 @@ pub struct ConversionResult {
     pub output_file: Option<PathBuf>,
     pub success: bool,
     pub message: String,
+}
+
+fn section_heading(ui: &mut egui::Ui, text: &str) {
+    ui.label(egui::RichText::new(text).color(SECTION_LABEL).size(13.0).strong());
+    ui.add_space(4.0);
 }
 
 impl eframe::App for RustySamplersApp {
@@ -93,6 +108,7 @@ impl eframe::App for RustySamplersApp {
 
         // Menu bar
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+            ui.add_space(2.0);
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
                     if ui.button("Open AKP Files...").clicked() {
@@ -116,233 +132,269 @@ impl eframe::App for RustySamplersApp {
                     }
                 });
             });
+            ui.add_space(2.0);
         });
 
-        // Main content area
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Rusty Samplers - Multi-Format Converter");
-            ui.separator();
-
-            // File selection section
-            ui.group(|ui| {
-                ui.label("Input Files");
-
+        // Bottom bar with convert button
+        egui::TopBottomPanel::bottom("bottom_panel")
+            .min_height(60.0)
+            .show(ctx, |ui| {
+                ui.add_space(10.0);
                 ui.horizontal(|ui| {
-                    if ui.button("Select AKP Files").clicked() {
-                        self.open_file_dialog();
+                    ui.add_space(12.0);
+
+                    let can_convert = !self.selected_files.is_empty() && !self.is_converting;
+                    let button_text = if self.is_converting { "Converting..." } else { "Convert" };
+
+                    let button = egui::Button::new(
+                        egui::RichText::new(button_text).size(15.0).strong()
+                    )
+                    .min_size(egui::Vec2::new(140.0, 36.0))
+                    .fill(if can_convert { ACCENT } else { egui::Color32::from_rgb(50, 55, 65) })
+                    .rounding(6.0);
+
+                    if ui.add_enabled(can_convert, button).clicked() {
+                        self.start_conversion();
                     }
 
-                    ui.checkbox(&mut self.batch_mode, "Batch Mode");
-                });
+                    if !self.selected_files.is_empty() {
+                        ui.add_space(8.0);
+                        if ui.button(egui::RichText::new("Clear").color(MUTED)).clicked() {
+                            self.selected_files.clear();
+                            self.conversion_results.clear();
+                            self.conversion_status.clear();
+                        }
+                    }
 
-                // Drag and drop area
-                let drop_area = ui.allocate_response(
-                    egui::Vec2::new(ui.available_width(), 80.0),
-                    egui::Sense::hover()
-                );
-
-                ui.allocate_ui_at_rect(drop_area.rect, |ui| {
-                    ui.centered_and_justified(|ui| {
-                        if is_hovering {
-                            ui.colored_label(egui::Color32::from_rgb(100, 150, 255), "Drop files to add them...");
-                        } else if self.selected_files.is_empty() {
-                            ui.colored_label(egui::Color32::GRAY, "Drop AKP files here or click 'Select AKP Files'");
-                        } else {
-                            ui.label(format!("{} file(s) selected", self.selected_files.len()));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.add_space(12.0);
+                        if self.is_converting {
+                            ui.add(
+                                egui::ProgressBar::new(self.current_progress)
+                                    .animate(true)
+                                    .desired_width(200.0)
+                            );
+                        } else if !self.conversion_status.is_empty() {
+                            ui.label(egui::RichText::new(&self.conversion_status).color(MUTED).size(12.0));
                         }
                     });
                 });
+                ui.add_space(8.0);
+            });
 
-                // Draw border around drop area — bright blue + thicker when hovering
-                let (border_color, border_width) = if is_hovering {
-                    (egui::Color32::from_rgb(80, 140, 255), 3.0)
-                } else {
-                    (egui::Color32::from_gray(100), 2.0)
-                };
-                ui.painter().rect_stroke(
-                    drop_area.rect,
-                    5.0,
-                    egui::Stroke::new(border_width, border_color)
+        // Main content area
+        egui::CentralPanel::default()
+            .frame(egui::Frame::central_panel(&ctx.style()).inner_margin(egui::Margin::symmetric(20.0, 16.0)))
+            .show(ctx, |ui| {
+
+            // ── Drop zone ──
+            section_heading(ui, "INPUT FILES");
+
+            let drop_height = if self.selected_files.is_empty() { 180.0 } else { 100.0 };
+            let drop_area = ui.allocate_response(
+                egui::Vec2::new(ui.available_width(), drop_height),
+                egui::Sense::click(),
+            );
+
+            // Background fill
+            let bg = if is_hovering { DROP_HOVER_BG } else { DROP_BG };
+            ui.painter().rect_filled(drop_area.rect, 8.0, bg);
+
+            // Border
+            let (border_color, border_width) = if is_hovering {
+                (ACCENT, 2.0)
+            } else {
+                (egui::Color32::from_rgb(60, 65, 75), 1.0)
+            };
+            ui.painter().rect_stroke(
+                drop_area.rect,
+                8.0,
+                egui::Stroke::new(border_width, border_color),
+            );
+
+            // Drop zone text
+            let center = drop_area.rect.center();
+            if is_hovering {
+                ui.painter().text(
+                    center,
+                    egui::Align2::CENTER_CENTER,
+                    "Drop to add files",
+                    egui::FontId::proportional(16.0),
+                    ACCENT,
                 );
+            } else if self.selected_files.is_empty() {
+                ui.painter().text(
+                    center - egui::Vec2::new(0.0, 10.0),
+                    egui::Align2::CENTER_CENTER,
+                    "Drop .akp files here",
+                    egui::FontId::proportional(16.0),
+                    MUTED,
+                );
+                ui.painter().text(
+                    center + egui::Vec2::new(0.0, 12.0),
+                    egui::Align2::CENTER_CENTER,
+                    "or click to browse",
+                    egui::FontId::proportional(12.0),
+                    egui::Color32::from_rgb(100, 100, 110),
+                );
+            } else {
+                ui.painter().text(
+                    center,
+                    egui::Align2::CENTER_CENTER,
+                    format!("{} file(s) selected — drop more or click to add", self.selected_files.len()),
+                    egui::FontId::proportional(13.0),
+                    MUTED,
+                );
+            }
 
-                if !self.selected_files.is_empty() {
-                    ui.separator();
-                    let mut remove_index = None;
-                    egui::ScrollArea::vertical().max_height(100.0).show(ui, |ui| {
+            // Click to open file dialog
+            if drop_area.clicked() {
+                self.open_file_dialog();
+            }
+
+            // File list
+            if !self.selected_files.is_empty() {
+                ui.add_space(6.0);
+                let mut remove_index = None;
+                egui::ScrollArea::vertical()
+                    .max_height(120.0)
+                    .show(ui, |ui| {
                         for (i, file) in self.selected_files.iter().enumerate() {
                             ui.horizontal(|ui| {
-                                ui.label("*");
-                                ui.label(file.file_name().unwrap().to_string_lossy());
+                                ui.label(egui::RichText::new("AKP").color(ACCENT_DIM).size(10.0).strong());
+                                ui.add_space(4.0);
+                                ui.label(file.file_name().unwrap_or(file.as_os_str()).to_string_lossy());
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    if ui.small_button("x").clicked() {
+                                    if ui.small_button(egui::RichText::new("x").color(MUTED)).clicked() {
                                         remove_index = Some(i);
                                     }
                                 });
                             });
                         }
                     });
-                    if let Some(i) = remove_index {
-                        self.selected_files.remove(i);
-                    }
+                if let Some(i) = remove_index {
+                    self.selected_files.remove(i);
                 }
+            }
+
+            ui.add_space(20.0);
+
+            // ── Format selection ──
+            section_heading(ui, "OUTPUT FORMAT");
+
+            ui.horizontal(|ui| {
+                ui.add_space(4.0);
+                ui.radio_value(&mut self.output_format, OutputFormat::Sfz, "SFZ");
+                ui.add_space(12.0);
+                ui.radio_value(&mut self.output_format, OutputFormat::DecentSampler, "Decent Sampler");
             });
 
-            ui.add_space(15.0);
+            ui.add_space(4.0);
+            let desc = match self.output_format {
+                OutputFormat::Sfz => "Standard sampler format — compatible with most samplers",
+                OutputFormat::DecentSampler => "Decent Sampler XML — includes UI controls and effects",
+            };
+            ui.label(egui::RichText::new(desc).color(MUTED).size(12.0));
 
-            // Format selection
-            ui.group(|ui| {
-                ui.label("Output Format");
-                ui.horizontal(|ui| {
-                    ui.radio_value(&mut self.output_format, OutputFormat::Sfz, "SFZ Format");
-                    ui.radio_value(&mut self.output_format, OutputFormat::DecentSampler, "Decent Sampler XML");
-                });
-
-                ui.separator();
-                match self.output_format {
-                    OutputFormat::Sfz => {
-                        ui.colored_label(egui::Color32::from_rgb(70, 130, 180), "Standard SFZ sampler format - compatible with most samplers");
-                    }
-                    OutputFormat::DecentSampler => {
-                        ui.colored_label(egui::Color32::from_rgb(34, 139, 34), "Decent Sampler XML format - includes UI controls and effects");
-                    }
-                }
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                ui.add_space(4.0);
+                ui.checkbox(&mut self.batch_mode, egui::RichText::new("Custom output directory").color(MUTED));
             });
-
-            ui.add_space(15.0);
 
             // Output directory (for batch mode)
             if self.batch_mode {
-                ui.group(|ui| {
-                    ui.label("Output Directory");
-                    ui.horizontal(|ui| {
-                        if ui.button("Select Directory").clicked() {
-                            self.select_output_directory();
-                        }
-
-                        if let Some(dir) = &self.output_directory {
-                            ui.label(format!("{}", dir.display()));
-                        } else {
-                            ui.colored_label(egui::Color32::GRAY, "Same as input files");
-                        }
-                    });
+                ui.horizontal(|ui| {
+                    ui.add_space(24.0);
+                    if ui.small_button("Browse...").clicked() {
+                        self.select_output_directory();
+                    }
+                    ui.add_space(4.0);
+                    if let Some(dir) = &self.output_directory {
+                        ui.label(egui::RichText::new(format!("{}", dir.display())).size(12.0));
+                    } else {
+                        ui.label(egui::RichText::new("Default: same as input").color(MUTED).size(12.0));
+                    }
                 });
-                ui.add_space(15.0);
             }
 
-            // Conversion button and status
-            ui.group(|ui| {
-                ui.label("Conversion");
+            ui.add_space(20.0);
+
+            // ── Results section ──
+            if !self.conversion_results.is_empty() {
+                section_heading(ui, "RESULTS");
+
+                let success_count = self.conversion_results.iter().filter(|r| r.success).count();
+                let fail_count = self.conversion_results.len() - success_count;
 
                 ui.horizontal(|ui| {
-                    let can_convert = !self.selected_files.is_empty() && !self.is_converting;
-
-                    let button_text = if self.is_converting {
-                        "Converting..."
-                    } else {
-                        "Convert Files"
-                    };
-
-                    let button = egui::Button::new(button_text).min_size(egui::Vec2::new(120.0, 30.0));
-
-                    if ui.add_enabled(can_convert, button).clicked() {
-                        self.start_conversion();
-                    }
-
-                    if !self.selected_files.is_empty()
-                        && ui.button("Clear Files").clicked()
-                    {
-                        self.selected_files.clear();
-                        self.conversion_results.clear();
-                        self.conversion_status.clear();
+                    ui.label(egui::RichText::new(format!("{success_count} converted")).color(SUCCESS).size(12.0));
+                    if fail_count > 0 {
+                        ui.add_space(8.0);
+                        ui.label(egui::RichText::new(format!("{fail_count} failed")).color(FAILURE).size(12.0));
                     }
                 });
 
-                if !self.conversion_status.is_empty() {
-                    ui.separator();
-                    ui.label(&self.conversion_status);
-                }
-
-                if self.is_converting {
-                    ui.add(egui::ProgressBar::new(self.current_progress).animate(true).text("Converting..."));
-                }
-            });
-
-            ui.add_space(15.0);
-
-            // Results section
-            if !self.conversion_results.is_empty() {
-                ui.group(|ui| {
-                    ui.label("Conversion Results");
-
-                    let success_count = self.conversion_results.iter().filter(|r| r.success).count();
-                    let total_count = self.conversion_results.len();
-
-                    ui.horizontal(|ui| {
-                        ui.colored_label(egui::Color32::GREEN, format!("Success: {success_count}"));
-                        let fail_count = total_count - success_count;
-                        ui.colored_label(egui::Color32::RED, format!("Failed: {fail_count}"));
-                    });
-
-                    ui.separator();
-                    egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
-                        for result in &self.conversion_results {
-                            ui.horizontal(|ui| {
-                                if result.success {
-                                    ui.colored_label(egui::Color32::GREEN, "OK");
-                                } else {
-                                    ui.colored_label(egui::Color32::RED, "FAIL");
-                                }
-                                ui.label(result.input_file.file_name().unwrap().to_string_lossy());
-                                ui.label("->");
-                                if let Some(output) = &result.output_file {
-                                    ui.label(output.file_name().unwrap().to_string_lossy());
-                                }
-                            });
-                            if !result.message.is_empty() {
-                                ui.indent("result_msg", |ui| {
-                                    ui.small(&result.message);
-                                });
+                ui.add_space(4.0);
+                egui::ScrollArea::vertical().max_height(180.0).show(ui, |ui| {
+                    for result in &self.conversion_results {
+                        ui.horizontal(|ui| {
+                            if result.success {
+                                ui.label(egui::RichText::new("OK").color(SUCCESS).size(11.0).strong());
+                            } else {
+                                ui.label(egui::RichText::new("FAIL").color(FAILURE).size(11.0).strong());
                             }
+                            ui.add_space(4.0);
+                            ui.label(egui::RichText::new(
+                                result.input_file.file_name().unwrap_or(result.input_file.as_os_str()).to_string_lossy()
+                            ).size(12.0));
+                            if let Some(output) = &result.output_file {
+                                ui.label(egui::RichText::new("->").color(MUTED).size(12.0));
+                                ui.label(egui::RichText::new(
+                                    output.file_name().unwrap_or(output.as_os_str()).to_string_lossy()
+                                ).size(12.0));
+                            }
+                        });
+                        if !result.message.is_empty() && !result.success {
+                            ui.indent("result_msg", |ui| {
+                                ui.label(egui::RichText::new(&result.message).color(MUTED).size(11.0));
+                            });
                         }
-                    });
+                    }
                 });
             }
         });
 
         // About dialog
         if self.show_about {
-            egui::Window::new("About Rusty Samplers")
+            egui::Window::new("About")
                 .collapsible(false)
                 .resizable(false)
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .min_width(300.0)
                 .show(ctx, |ui| {
+                    ui.add_space(8.0);
                     ui.vertical_centered(|ui| {
-                        ui.heading("Rusty Samplers v1.0");
-                        ui.label("Multi-Format Sampler Converter");
+                        ui.label(egui::RichText::new("Rusty Samplers").size(20.0).strong());
+                        ui.add_space(2.0);
+                        ui.label(egui::RichText::new("Multi-Format Sampler Converter").color(MUTED).size(13.0));
                     });
+                    ui.add_space(12.0);
                     ui.separator();
+                    ui.add_space(8.0);
 
-                    ui.group(|ui| {
-                        ui.label("Converts Akai AKP files to:");
-                        ui.label("  - SFZ format");
-                        ui.label("  - Decent Sampler XML format");
-                    });
+                    ui.label("Converts Akai AKP sampler programs to:");
+                    ui.add_space(4.0);
+                    ui.label(egui::RichText::new("  SFZ — universal sampler format").size(12.0));
+                    ui.label(egui::RichText::new("  Decent Sampler — XML with UI and effects").size(12.0));
 
-                    ui.group(|ui| {
-                        ui.label("Features:");
-                        ui.label("  - Advanced parameter mapping");
-                        ui.label("  - Envelope, filter & LFO conversion");
-                        ui.label("  - Modulation routing support");
-                        ui.label("  - Batch processing");
-                        ui.label("  - Modern GUI interface");
-                    });
-
-                    ui.separator();
-                    ui.horizontal(|ui| {
+                    ui.add_space(12.0);
+                    ui.vertical_centered(|ui| {
                         if ui.button("Close").clicked() {
                             self.show_about = false;
                         }
                     });
+                    ui.add_space(4.0);
                 });
         }
     }
@@ -386,8 +438,8 @@ impl RustySamplersApp {
             let mut success_count = 0usize;
 
             for (i, file_path) in files.iter().enumerate() {
-                let progress_msg = format!("Converting {} ({}/{})",
-                    file_path.file_name().unwrap().to_string_lossy(),
+                let display_name = file_path.file_name().unwrap_or(file_path.as_os_str()).to_string_lossy();
+                let progress_msg = format!("Converting {display_name} ({}/{})",
                     i + 1,
                     files.len()
                 );
@@ -398,7 +450,7 @@ impl RustySamplersApp {
 
                 let result = if success {
                     let output_file = if let Some(dir) = &output_dir {
-                        let filename = file_path.file_stem().unwrap();
+                        let filename = file_path.file_stem().unwrap_or(file_path.as_os_str());
                         let extension = match format {
                             OutputFormat::Sfz => "sfz",
                             OutputFormat::DecentSampler => "dspreset",
@@ -446,9 +498,9 @@ impl RustySamplersApp {
                 let _ = tx.send(ConversionProgress::FileResult(result));
 
                 let status_msg = if file_success {
-                    format!("Converted {}", file_path.file_name().unwrap().to_string_lossy())
+                    format!("Converted {display_name}")
                 } else {
-                    format!("Failed to convert {}", file_path.file_name().unwrap().to_string_lossy())
+                    format!("Failed to convert {display_name}")
                 };
                 if file_success { success_count += 1; }
                 let _ = tx.send(ConversionProgress::Progress(status_msg, (i + 1) as f32 / files.len() as f32));
@@ -474,7 +526,7 @@ fn main() -> Result<(), eframe::Error> {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([900.0, 700.0])
             .with_min_inner_size([600.0, 500.0])
-            .with_title("Rusty Samplers - Multi-Format Converter"),
+            .with_title("Rusty Samplers"),
         ..Default::default()
     };
 
@@ -483,8 +535,21 @@ fn main() -> Result<(), eframe::Error> {
         options,
         Box::new(|cc| {
             let mut style = (*cc.egui_ctx.style()).clone();
+
+            // Tighter spacing
+            style.spacing.item_spacing = egui::Vec2::new(8.0, 6.0);
+            style.spacing.window_margin = egui::Margin::same(16.0);
+
+            // Softer rounding
+            style.visuals.window_rounding = egui::Rounding::same(8.0);
+            style.visuals.widgets.noninteractive.rounding = egui::Rounding::same(4.0);
+            style.visuals.widgets.inactive.rounding = egui::Rounding::same(4.0);
+            style.visuals.widgets.hovered.rounding = egui::Rounding::same(4.0);
+            style.visuals.widgets.active.rounding = egui::Rounding::same(4.0);
+
             style.visuals.button_frame = true;
             style.visuals.collapsing_header_frame = true;
+
             cc.egui_ctx.set_style(style);
 
             Ok(Box::new(RustySamplersApp::default()))

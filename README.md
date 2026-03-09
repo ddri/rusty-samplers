@@ -145,7 +145,7 @@ rusty-samplers/
 ## Testing
 
 ```bash
-# Run all tests (19 unit + 5 integration)
+# Run all tests (25 unit + 5 integration)
 cargo test
 
 # Unit tests only
