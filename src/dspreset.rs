@@ -1,5 +1,13 @@
 use crate::types::AkaiProgram;
 
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('"', "&quot;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('\'', "&apos;")
+}
+
 impl AkaiProgram {
     /// Converts the parsed AkaiProgram into a Decent Sampler .dspreset XML string.
     pub fn to_dspreset_string(&self) -> String {
@@ -56,7 +64,7 @@ impl AkaiProgram {
 
             if let Some(sample) = &keygroup.sample {
                 xml.push_str("      <sample ");
-                xml.push_str(&format!("path=\"{}\" ", sample.filename));
+                xml.push_str(&format!("path=\"{}\" ", xml_escape(&sample.filename)));
                 xml.push_str(&format!("loNote=\"{}\" hiNote=\"{}\" ", keygroup.low_key, keygroup.high_key));
                 xml.push_str(&format!("loVel=\"{}\" hiVel=\"{}\" ", keygroup.low_vel, keygroup.high_vel));
 

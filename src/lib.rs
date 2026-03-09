@@ -9,7 +9,6 @@ pub use types::{AkaiProgram, OutputFormat};
 pub use parser::{validate_riff_header, parse_top_level_chunks};
 
 use std::path::Path;
-use std::io::{Seek, SeekFrom};
 
 /// Conversion function for GUI use
 pub fn convert_file(input_path: &Path, format: OutputFormat) -> std::result::Result<String, String> {
@@ -24,15 +23,10 @@ pub fn convert_file(input_path: &Path, format: OutputFormat) -> std::result::Res
     let file_size = file.metadata()
         .map_err(|e| format!("Failed to read file size: {e}"))?.len();
 
-    file.seek(SeekFrom::Current(4))
-        .map_err(|e| format!("Failed to seek past RIFF header: {e}"))?;
-
-    let end_pos = file_size;
-
     let mut program = AkaiProgram::default();
     let progress = indicatif::ProgressBar::hidden();
 
-    parse_top_level_chunks(&mut file, end_pos, &mut program, &progress)
+    parse_top_level_chunks(&mut file, file_size, &mut program, &progress)
         .map_err(|e| format!("Failed to parse AKP chunks: {e}"))?;
 
     let output = match format {

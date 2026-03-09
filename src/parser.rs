@@ -7,6 +7,15 @@ use indicatif::ProgressBar;
 use crate::error::{AkpError, Result};
 use crate::types::*;
 
+/// Maximum allowed size for a single chunk (64 MB).
+const MAX_CHUNK_SIZE: u32 = 64 * 1024 * 1024;
+
+/// Maximum number of keygroups per program.
+const MAX_KEYGROUPS: usize = 1000;
+
+/// Maximum number of modulation entries per keygroup.
+const MAX_MODS_PER_KEYGROUP: usize = 256;
+
 pub fn validate_riff_header(file: &mut File) -> Result<()> {
     let mut buf = [0u8; 4];
     file.read_exact(&mut buf)
@@ -34,13 +43,28 @@ pub fn parse_top_level_chunks(file: &mut File, end_pos: u64, program: &mut AkaiP
 
     while file.stream_position()? < end_pos {
         let current_pos = file.stream_position()?;
-        let progress_percent = (current_pos * 30) / end_pos;
-        if processed != progress_percent {
-            progress.set_position(20 + progress_percent);
-            processed = progress_percent;
+        if end_pos > 0 {
+            let progress_percent = (current_pos * 30) / end_pos;
+            if processed != progress_percent {
+                progress.set_position(20 + progress_percent);
+                processed = progress_percent;
+            }
         }
 
         let header = read_chunk_header(file)?;
+
+        if header.size > MAX_CHUNK_SIZE {
+            return Err(AkpError::InvalidChunkSize(header.id, header.size));
+        }
+
+        let chunk_start = file.stream_position()?;
+        if chunk_start + header.size as u64 > end_pos {
+            return Err(AkpError::CorruptedChunk(
+                header.id,
+                "Chunk extends beyond container boundary".to_string(),
+            ));
+        }
+
         match header.id.as_str() {
             "prg " => {
                 if header.size < 3 {
@@ -55,8 +79,14 @@ pub fn parse_top_level_chunks(file: &mut File, end_pos: u64, program: &mut AkaiP
                 if header.size == 0 {
                     return Err(AkpError::InvalidChunkSize("kgrp".to_string(), header.size));
                 }
+                if program.keygroups.len() >= MAX_KEYGROUPS {
+                    return Err(AkpError::CorruptedChunk(
+                        "kgrp".to_string(),
+                        format!("Exceeded maximum of {MAX_KEYGROUPS} keygroups"),
+                    ));
+                }
                 progress.set_message("Parsing keygroup...");
-                let kgrp_end_pos = file.stream_position()? + header.size as u64;
+                let kgrp_end_pos = chunk_start + header.size as u64;
                 let keygroup = parse_keygroup(file, kgrp_end_pos, progress)?;
                 program.keygroups.push(keygroup);
             }
@@ -76,6 +106,19 @@ fn parse_keygroup(file: &mut File, end_pos: u64, progress: &ProgressBar) -> Resu
 
     while file.stream_position()? < end_pos {
         let header = read_chunk_header(file)?;
+
+        if header.size > MAX_CHUNK_SIZE {
+            return Err(AkpError::InvalidChunkSize(header.id, header.size));
+        }
+
+        let chunk_start = file.stream_position()?;
+        if chunk_start + header.size as u64 > end_pos {
+            return Err(AkpError::CorruptedChunk(
+                header.id,
+                "Chunk extends beyond keygroup boundary".to_string(),
+            ));
+        }
+
         let mut chunk_data = vec![0; header.size as usize];
         file.read_exact(&mut chunk_data)?;
         let mut cursor = Cursor::new(chunk_data);
@@ -134,6 +177,12 @@ fn parse_keygroup(file: &mut File, end_pos: u64, progress: &ProgressBar) -> Resu
                 if header.size < 4 {
                     return Err(AkpError::InvalidChunkSize("mods".to_string(), header.size));
                 }
+                if keygroup.mods.len() >= MAX_MODS_PER_KEYGROUP {
+                    return Err(AkpError::CorruptedChunk(
+                        "mods".to_string(),
+                        format!("Exceeded maximum of {MAX_MODS_PER_KEYGROUP} modulations per keygroup"),
+                    ));
+                }
                 keygroup.mods.push(parse_mods_chunk(&mut cursor)?);
             }
             _ => {
@@ -189,13 +238,47 @@ pub fn parse_smpl_chunk(cursor: &mut Cursor<Vec<u8>>) -> Result<Sample> {
     let mut buffer = Vec::new();
     cursor.read_to_end(&mut buffer)?;
     let end = buffer.iter().position(|&b| b == 0).unwrap_or(buffer.len());
-    let filename = String::from_utf8_lossy(&buffer[..end]).to_string();
+    let raw_filename = String::from_utf8_lossy(&buffer[..end]).to_string();
 
-    if filename.is_empty() {
+    if raw_filename.is_empty() {
         return Err(AkpError::CorruptedChunk("smpl".to_string(), "Empty sample filename".to_string()));
     }
 
+    let filename = sanitize_sample_path(&raw_filename);
+
+    if filename.is_empty() {
+        return Err(AkpError::CorruptedChunk("smpl".to_string(), "Sample filename is empty after sanitization".to_string()));
+    }
+
     Ok(Sample { filename })
+}
+
+/// Sanitize a sample path from an AKP file.
+/// Normalizes separators, removes `..` components and leading `/` or drive letters,
+/// but preserves legitimate subdirectory structure (e.g., `Strings/Violin_C3.wav`).
+fn sanitize_sample_path(raw: &str) -> String {
+    // Normalize backslashes to forward slashes
+    let normalized = raw.replace('\\', "/");
+
+    // Strip drive letter prefix (e.g., "C:/")
+    let without_drive = if normalized.len() >= 3
+        && normalized.as_bytes()[0].is_ascii_alphabetic()
+        && &normalized[1..3] == ":/"
+    {
+        &normalized[3..]
+    } else {
+        &normalized
+    };
+
+    // Filter out dangerous components, preserve legitimate subdirs
+    let clean: Vec<&str> = without_drive
+        .split('/')
+        .filter(|component| {
+            !component.is_empty() && *component != "." && *component != ".."
+        })
+        .collect();
+
+    clean.join("/")
 }
 
 pub fn parse_tune_chunk(cursor: &mut Cursor<Vec<u8>>) -> Result<Tune> {

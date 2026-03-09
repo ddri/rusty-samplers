@@ -94,7 +94,7 @@ fn run_batch_conversion(directory: &Path, format: OutputFormat) -> Result<()> {
     let mut errors = Vec::new();
 
     for akp_file in &akp_files {
-        let file_name = akp_file.file_name().unwrap().to_string_lossy();
+        let file_name = akp_file.file_name().unwrap_or(akp_file.as_os_str()).to_string_lossy();
         batch_progress.set_message(format!("Processing {file_name}"));
 
         match run_conversion(akp_file, format) {
