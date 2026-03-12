@@ -1,4 +1,4 @@
-use crate::types::{AkaiProgram, EnvelopeTiming, Keygroup, mod_source_name, mod_source_sfz_cc, mod_source_type};
+use crate::types::{AkaiProgram, EnvelopeTiming, Keygroup, mod_source_name, mod_source_sfz_suffix, mod_source_type};
 
 impl AkaiProgram {
     pub fn to_sfz_string(&self) -> String {
@@ -267,15 +267,15 @@ impl AkaiProgram {
                 if let Some(aux) = &keygroup.aux_env {
                     let depth_cents = amount as i32 * 12; // ±100 → ±1200 cents
                     sfz.push_str(&format!("pitcheg_depth={depth_cents}\n"));
-                    sfz.push_str(&format!("pitcheg_attack={:.3}\n", aux_env_attack(aux.rate_1)));
-                    sfz.push_str(&format!("pitcheg_decay={:.3}\n", aux_env_decay(aux.rate_2)));
+                    sfz.push_str(&format!("pitcheg_attack={:.3}\n", aux_env_rate_to_time(aux.rate_1)));
+                    sfz.push_str(&format!("pitcheg_decay={:.3}\n", aux_env_rate_to_time(aux.rate_2)));
                     sfz.push_str(&format!("pitcheg_sustain={}\n", aux.level_3));
                     sfz.push_str(&format!("pitcheg_release={:.3}\n", aux_env_release(aux.rate_4)));
                 }
             }
             "cc" => {
-                if let Some(cc) = mod_source_sfz_cc(source) {
-                    sfz.push_str(&format!("pitch_on{cc}={cents}\n"));
+                if let Some(suffix) = mod_source_sfz_suffix(source) {
+                    sfz.push_str(&format!("pitch{suffix}={cents}\n"));
                 }
             }
             _ => {
@@ -307,8 +307,8 @@ impl AkaiProgram {
                 // Handled by fil_keytrack, skip
             }
             "cc" => {
-                if let Some(cc) = mod_source_sfz_cc(source) {
-                    sfz.push_str(&format!("cutoff_on{cc}={cents}\n"));
+                if let Some(suffix) = mod_source_sfz_suffix(source) {
+                    sfz.push_str(&format!("cutoff{suffix}={cents}\n"));
                 }
             }
             _ => {
@@ -335,8 +335,8 @@ impl AkaiProgram {
                 sfz.push_str(&format!("lfo2_volume={amount}\n"));
             }
             "cc" => {
-                if let Some(cc) = mod_source_sfz_cc(source) {
-                    sfz.push_str(&format!("volume_on{cc}={amount}\n"));
+                if let Some(suffix) = mod_source_sfz_suffix(source) {
+                    sfz.push_str(&format!("volume{suffix}={amount}\n"));
                 }
             }
             _ => {
@@ -354,8 +354,8 @@ impl AkaiProgram {
         let src_type = mod_source_type(source);
         match src_type {
             "cc" => {
-                if let Some(cc) = mod_source_sfz_cc(source) {
-                    sfz.push_str(&format!("pan_on{cc}={amount}\n"));
+                if let Some(suffix) = mod_source_sfz_suffix(source) {
+                    sfz.push_str(&format!("pan{suffix}={amount}\n"));
                 }
             }
             "lfo1" => {
@@ -380,17 +380,12 @@ impl AkaiProgram {
     }
 }
 
-/// Convert AKP aux envelope rate to attack time (same curve as amp/filter attack).
-fn aux_env_attack(v: u8) -> f32 {
+/// Convert AKP aux envelope rate to attack/decay time (same curve as amp/filter).
+fn aux_env_rate_to_time(v: u8) -> f32 {
     if v == 0 { 0.0 } else { (v as f32 / 100.0 * 4.0).exp() * 0.001 }
 }
 
-/// Convert AKP aux envelope rate to decay time (same curve as amp/filter decay).
-fn aux_env_decay(v: u8) -> f32 {
-    if v == 0 { 0.0 } else { (v as f32 / 100.0 * 4.0).exp() * 0.001 }
-}
-
-/// Convert AKP aux envelope rate to release time (same curve as amp/filter release).
+/// Convert AKP aux envelope rate to release time (steeper curve, 0.001s minimum).
 fn aux_env_release(v: u8) -> f32 {
     if v == 0 { 0.001 } else { (v as f32 / 100.0 * 5.0).exp() * 0.001 }
 }

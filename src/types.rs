@@ -403,15 +403,18 @@ impl ProgramOutput {
     }
 }
 
-/// Map AKP modulation source (0-14) to SFZ CC suffix or special identifier.
-/// Returns None for sources that don't map to a CC/controller (velocity, keyboard, envelopes, etc.).
-pub fn mod_source_sfz_cc(source: u8) -> Option<&'static str> {
+/// Map AKP modulation source (0-14) to SFZ opcode suffix.
+/// Returns the full suffix including connector: "_oncc1", "_chanaft", etc.
+/// This avoids invalid opcodes like "pitch_onbend" — bend and aftertouch
+/// use dedicated suffixes without the "on" prefix.
+/// Returns None for sources that don't map to a CC/controller.
+pub fn mod_source_sfz_suffix(source: u8) -> Option<&'static str> {
     match source {
-        1 => Some("cc1"),     // MODWHEEL
-        2 => Some("bend"),    // BEND
-        3 => Some("chanaft"), // AFTERTOUCH
-        4 => Some("cc16"),    // EXTERNAL (typically general purpose controller)
-        _ => None,            // NO_SOURCE, VELOCITY, KEYBOARD, LFOs, envelopes, deltas
+        1 => Some("_oncc1"),    // MODWHEEL
+        2 => Some("_bend"),     // BEND (not "_onbend")
+        3 => Some("_chanaft"),  // AFTERTOUCH (not "_onchanaft")
+        4 => Some("_oncc16"),   // EXTERNAL (typically general purpose controller)
+        _ => None,              // NO_SOURCE, VELOCITY, KEYBOARD, LFOs, envelopes, deltas
     }
 }
 
