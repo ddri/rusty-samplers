@@ -20,7 +20,8 @@ impl AkaiProgram {
                     sfz.push_str(&format!("amplitude={}\n", output.loudness));
                 }
 
-                let vel_track = output.velocity_sensitivity as i32 * 2;
+                // AKP range (-100..100) maps directly to SFZ amp_veltrack (-100..100)
+                let vel_track = output.velocity_sensitivity as i32;
                 if vel_track != 100 {
                     sfz.push_str(&format!("amp_veltrack={vel_track}\n"));
                 }
@@ -238,19 +239,19 @@ mod tests {
         program.keygroups.push(Keygroup::default());
 
         let sfz = program.to_sfz_string();
-        assert!(sfz.contains("amp_veltrack=50")); // 25 * 2 = 50
+        assert!(sfz.contains("amp_veltrack=25")); // direct 1:1 mapping
     }
 
     #[test]
     fn test_sfz_amp_veltrack_omitted_at_default() {
         let mut program = AkaiProgram {
-            output: Some(ProgramOutput { velocity_sensitivity: 50, ..Default::default() }),
+            output: Some(ProgramOutput { velocity_sensitivity: 100, ..Default::default() }),
             ..Default::default()
         };
         program.keygroups.push(Keygroup::default());
 
         let sfz = program.to_sfz_string();
-        assert!(!sfz.contains("amp_veltrack")); // 50 * 2 = 100 = SFZ default, omitted
+        assert!(!sfz.contains("amp_veltrack")); // 100 = SFZ default, omitted
     }
 
     #[test]
