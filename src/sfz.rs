@@ -224,8 +224,33 @@ mod tests {
         program.keygroups.push(Keygroup::default());
 
         let sfz = program.to_sfz_string();
+        assert!(sfz.contains("<global>\n"));
         assert!(sfz.contains("bend_up=1200"));
         assert!(sfz.contains("bend_down=-1200"));
+    }
+
+    #[test]
+    fn test_sfz_amp_veltrack_from_output() {
+        let mut program = AkaiProgram {
+            output: Some(ProgramOutput { velocity_sensitivity: 25, ..Default::default() }),
+            ..Default::default()
+        };
+        program.keygroups.push(Keygroup::default());
+
+        let sfz = program.to_sfz_string();
+        assert!(sfz.contains("amp_veltrack=50")); // 25 * 2 = 50
+    }
+
+    #[test]
+    fn test_sfz_amp_veltrack_omitted_at_default() {
+        let mut program = AkaiProgram {
+            output: Some(ProgramOutput { velocity_sensitivity: 50, ..Default::default() }),
+            ..Default::default()
+        };
+        program.keygroups.push(Keygroup::default());
+
+        let sfz = program.to_sfz_string();
+        assert!(!sfz.contains("amp_veltrack")); // 50 * 2 = 100 = SFZ default, omitted
     }
 
     #[test]

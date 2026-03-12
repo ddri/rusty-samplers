@@ -207,4 +207,29 @@ mod tests {
         assert!(xml.contains("waveform=\"sine\""));
         assert!(xml.contains("amount=\"0.75\""));
     }
+
+    #[test]
+    fn test_dspreset_volume_on_groups_wrapper() {
+        let mut program = AkaiProgram {
+            output: Some(ProgramOutput::default()), // loudness=85 → ~-4dB
+            ..Default::default()
+        };
+        program.keygroups.push(Keygroup::default());
+
+        let xml = program.to_dspreset_string();
+        assert!(xml.contains("<groups volume=\""));
+        assert!(!xml.contains("<group name=\"Group1\" volume=")); // not per-group
+    }
+
+    #[test]
+    fn test_dspreset_amp_vel_track() {
+        let mut program = AkaiProgram {
+            output: Some(ProgramOutput { velocity_sensitivity: 25, ..Default::default() }),
+            ..Default::default()
+        };
+        program.keygroups.push(Keygroup::default());
+
+        let xml = program.to_dspreset_string();
+        assert!(xml.contains("ampVelTrack=\"0.50\"")); // 25/50 = 0.50
+    }
 }
