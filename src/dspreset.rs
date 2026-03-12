@@ -136,9 +136,7 @@ mod tests {
     #[test]
     fn test_dspreset_basic_structure() {
         let mut program = AkaiProgram::default();
-        let mut keygroup = Keygroup::default();
-        keygroup.low_key = 36;
-        keygroup.high_key = 72;
+        let mut keygroup = Keygroup { low_key: 36, high_key: 72, ..Default::default() };
         keygroup.zones.push(Zone {
             sample_name: "piano.wav".to_string(),
             low_vel: 1,
@@ -160,8 +158,7 @@ mod tests {
     #[test]
     fn test_dspreset_filter_binding_uses_dollar_prefix() {
         let mut program = AkaiProgram::default();
-        let mut keygroup = Keygroup::default();
-        keygroup.filter = Some(Filter { filter_type: 0, cutoff: 50, ..Default::default() });
+        let keygroup = Keygroup { filter: Some(Filter { filter_type: 0, cutoff: 50, ..Default::default() }), ..Default::default() };
         program.keygroups.push(keygroup);
 
         let xml = program.to_dspreset_string();
@@ -172,8 +169,7 @@ mod tests {
     #[test]
     fn test_dspreset_envelope_values() {
         let mut program = AkaiProgram::default();
-        let mut keygroup = Keygroup::default();
-        keygroup.amp_env = Some(Envelope { attack: 20, decay: 40, sustain: 80, release: 60, ..Default::default() });
+        let keygroup = Keygroup { amp_env: Some(Envelope { attack: 20, decay: 40, sustain: 80, release: 60, ..Default::default() }), ..Default::default() };
         program.keygroups.push(keygroup);
 
         let xml = program.to_dspreset_string();
@@ -196,8 +192,7 @@ mod tests {
 
     #[test]
     fn test_dspreset_lfo_from_program_level() {
-        let mut program = AkaiProgram::default();
-        program.lfo1 = Some(Lfo { waveform: 0, rate: 50, depth: 75, ..Default::default() });
+        let mut program = AkaiProgram { lfo1: Some(Lfo { waveform: 0, rate: 50, depth: 75, ..Default::default() }), ..Default::default() };
         program.keygroups.push(Keygroup::default());
 
         let xml = program.to_dspreset_string();

@@ -151,9 +151,7 @@ mod tests {
     #[test]
     fn test_sfz_generation_basic() {
         let mut program = AkaiProgram::default();
-        let mut keygroup = Keygroup::default();
-        keygroup.low_key = 60;
-        keygroup.high_key = 72;
+        let mut keygroup = Keygroup { low_key: 60, high_key: 72, ..Default::default() };
         keygroup.zones.push(Zone {
             sample_name: "test.wav".to_string(),
             low_vel: 1,
@@ -174,8 +172,7 @@ mod tests {
     #[test]
     fn test_sfz_filter_type_zero_is_active() {
         let mut program = AkaiProgram::default();
-        let mut keygroup = Keygroup::default();
-        keygroup.filter = Some(Filter { filter_type: 0, cutoff: 50, ..Default::default() });
+        let mut keygroup = Keygroup { filter: Some(Filter { filter_type: 0, cutoff: 50, ..Default::default() }), ..Default::default() };
         keygroup.zones.push(Zone { sample_name: "t.wav".to_string(), ..Default::default() });
         program.keygroups.push(keygroup);
 
@@ -187,8 +184,7 @@ mod tests {
     #[test]
     fn test_sfz_resonance_from_0_12_range() {
         let mut program = AkaiProgram::default();
-        let mut keygroup = Keygroup::default();
-        keygroup.filter = Some(Filter { filter_type: 0, cutoff: 50, resonance: 6, ..Default::default() });
+        let mut keygroup = Keygroup { filter: Some(Filter { filter_type: 0, cutoff: 50, resonance: 6, ..Default::default() }), ..Default::default() };
         keygroup.zones.push(Zone { sample_name: "t.wav".to_string(), ..Default::default() });
         program.keygroups.push(keygroup);
 
@@ -199,9 +195,7 @@ mod tests {
     #[test]
     fn test_sfz_multi_zone_keygroup() {
         let mut program = AkaiProgram::default();
-        let mut keygroup = Keygroup::default();
-        keygroup.low_key = 36;
-        keygroup.high_key = 72;
+        let mut keygroup = Keygroup { low_key: 36, high_key: 72, ..Default::default() };
         keygroup.zones.push(Zone { sample_name: "soft.wav".to_string(), low_vel: 0, high_vel: 63, ..Default::default() });
         keygroup.zones.push(Zone { sample_name: "loud.wav".to_string(), low_vel: 64, high_vel: 127, ..Default::default() });
         program.keygroups.push(keygroup);
@@ -216,8 +210,7 @@ mod tests {
 
     #[test]
     fn test_sfz_pitchbend_from_tuning() {
-        let mut program = AkaiProgram::default();
-        program.tuning = Some(ProgramTuning { pitchbend_up: 12, pitchbend_down: 12, ..Default::default() });
+        let mut program = AkaiProgram { tuning: Some(ProgramTuning { pitchbend_up: 12, pitchbend_down: 12, ..Default::default() }), ..Default::default() };
         program.keygroups.push(Keygroup::default());
 
         let sfz = program.to_sfz_string();
@@ -228,15 +221,13 @@ mod tests {
     #[test]
     fn test_sfz_envelope_with_velocity() {
         let mut program = AkaiProgram::default();
-        let mut keygroup = Keygroup::default();
-        keygroup.amp_env = Some(Envelope {
-            attack: 20,
-            decay: 40,
-            sustain: 80,
-            release: 60,
-            velocity_attack: -20,
+        let mut keygroup = Keygroup {
+            amp_env: Some(Envelope {
+                attack: 20, decay: 40, sustain: 80, release: 60,
+                velocity_attack: -20, ..Default::default()
+            }),
             ..Default::default()
-        });
+        };
         keygroup.zones.push(Zone { sample_name: "t.wav".to_string(), ..Default::default() });
         program.keygroups.push(keygroup);
 
@@ -248,15 +239,13 @@ mod tests {
     #[test]
     fn test_sfz_filter_env_depth() {
         let mut program = AkaiProgram::default();
-        let mut keygroup = Keygroup::default();
-        keygroup.filter_env = Some(FilterEnvelope {
-            attack: 5,
-            decay: 60,
-            sustain: 70,
-            release: 40,
-            depth: 50,
+        let mut keygroup = Keygroup {
+            filter_env: Some(FilterEnvelope {
+                attack: 5, decay: 60, sustain: 70, release: 40,
+                depth: 50, ..Default::default()
+            }),
             ..Default::default()
-        });
+        };
         keygroup.zones.push(Zone { sample_name: "t.wav".to_string(), ..Default::default() });
         program.keygroups.push(keygroup);
 
