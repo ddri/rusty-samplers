@@ -12,6 +12,12 @@ impl AkaiProgram {
     pub fn to_dspreset_string(&self) -> String {
         let mut xml = String::new();
 
+        // Pre-compute filter state for UI and modulators sections
+        let has_filter = self.keygroups.iter().any(|kg| kg.filter.is_some());
+        let filter_env_ref = self.keygroups.iter()
+            .find_map(|kg| kg.filter_env.as_ref().filter(|env| env.depth != 0));
+        let has_filter_env = filter_env_ref.is_some();
+
         xml.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
         xml.push_str("<DecentSampler minVersion=\"1.0.0\">\n");
 
@@ -37,15 +43,10 @@ impl AkaiProgram {
         xml.push_str("        <label text=\"Resonance\" x=\"0\" y=\"80\" width=\"90\" height=\"30\" />\n");
         xml.push_str("      </labeled-knob>\n");
 
-        // Filter envelope ADSR knobs (only when filter env has non-zero depth)
-        let has_filter_env = self.keygroups.iter().any(|kg| {
-            kg.filter_env.as_ref().is_some_and(|env| env.depth != 0)
-        });
-        if has_filter_env {
-            let fenv = self.keygroups.iter()
-                .find_map(|kg| kg.filter_env.as_ref().filter(|env| env.depth != 0))
-                .unwrap();
-            let att_val = if fenv.attack == 0 { 0.01 } else { fenv.attack_time() };
+        // Filter envelope ADSR knobs (only when filter effect and filter env both present)
+        if has_filter && has_filter_env {
+            let fenv = filter_env_ref.unwrap();
+            let att_val = if fenv.attack == 0 { 0.001 } else { fenv.attack_time() };
             let dec_val = if fenv.decay == 0 { 0.1 } else { fenv.decay_time() };
             let sus_val = fenv.sustain_normalized();
             let rel_val = if fenv.release == 0 { 0.1 } else { fenv.release_time() };
@@ -135,7 +136,6 @@ impl AkaiProgram {
 
         // Effects section
         xml.push_str("  <effects>\n");
-        let has_filter = self.keygroups.iter().any(|kg| kg.filter.is_some());
         if has_filter {
             xml.push_str("    <lowpass frequency=\"$FILTER_CUTOFF\" resonance=\"$FILTER_RESONANCE\" />\n");
         }
@@ -162,11 +162,9 @@ impl AkaiProgram {
             }
         }
 
-        // Filter envelope modulator
-        if has_filter_env {
-            let fenv = self.keygroups.iter()
-                .find_map(|kg| kg.filter_env.as_ref().filter(|env| env.depth != 0))
-                .unwrap();
+        // Filter envelope modulator (only when lowpass effect is present at effectIndex=0)
+        if has_filter && has_filter_env {
+            let fenv = filter_env_ref.unwrap();
             let attack = if fenv.attack == 0 { 0.001 } else { fenv.attack_time() };
             let decay = if fenv.decay == 0 { 0.1 } else { fenv.decay_time() };
             let sustain = fenv.sustain_normalized();
