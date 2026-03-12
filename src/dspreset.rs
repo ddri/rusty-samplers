@@ -59,7 +59,8 @@ impl AkaiProgram {
 
             // Velocity sensitivity (DS range 0.0-1.0, negative not supported)
             if let Some(output) = &self.output {
-                let vel_track = (output.velocity_sensitivity.max(0) as f32 / 50.0).min(1.0);
+                // AKP range (-100..100) → DS range (0.0..1.0), negative unsupported
+                let vel_track = (output.velocity_sensitivity.max(0) as f32 / 100.0).min(1.0);
                 if (vel_track - 1.0).abs() > f32::EPSILON {
                     xml.push_str(&format!(" ampVelTrack=\"{vel_track:.2}\""));
                 }
@@ -230,6 +231,6 @@ mod tests {
         program.keygroups.push(Keygroup::default());
 
         let xml = program.to_dspreset_string();
-        assert!(xml.contains("ampVelTrack=\"0.50\"")); // 25/50 = 0.50
+        assert!(xml.contains("ampVelTrack=\"0.25\"")); // 25/100 = 0.25
     }
 }
