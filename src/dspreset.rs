@@ -1,4 +1,4 @@
-use crate::types::AkaiProgram;
+use crate::types::{AkaiProgram, EnvelopeTiming};
 
 fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;")
@@ -40,7 +40,11 @@ impl AkaiProgram {
         xml.push_str("  </ui>\n\n");
 
         // Groups section
-        xml.push_str("  <groups>\n");
+        if let Some(output) = &self.output {
+            xml.push_str(&format!("  <groups volume=\"{:.2}\">\n", output.volume_db()));
+        } else {
+            xml.push_str("  <groups>\n");
+        }
 
         for (group_id, keygroup) in self.keygroups.iter().enumerate() {
             xml.push_str(&format!("    <group name=\"Group{}\"", group_id + 1));
@@ -53,9 +57,12 @@ impl AkaiProgram {
                 xml.push_str(&format!(" attack=\"{attack:.3}\" decay=\"{decay:.3}\" sustain=\"{sustain:.3}\" release=\"{release:.3}\""));
             }
 
-            // Volume from program output
+            // Velocity sensitivity (DS range 0.0-1.0, negative not supported)
             if let Some(output) = &self.output {
-                xml.push_str(&format!(" volume=\"{:.2}\"", output.volume_db()));
+                let vel_track = (output.velocity_sensitivity.max(0) as f32 / 50.0).min(1.0);
+                if (vel_track - 1.0).abs() > f32::EPSILON {
+                    xml.push_str(&format!(" ampVelTrack=\"{vel_track:.2}\""));
+                }
             }
 
             xml.push_str(">\n");
@@ -199,5 +206,30 @@ mod tests {
         assert!(xml.contains("<modulators>"));
         assert!(xml.contains("waveform=\"sine\""));
         assert!(xml.contains("amount=\"0.75\""));
+    }
+
+    #[test]
+    fn test_dspreset_volume_on_groups_wrapper() {
+        let mut program = AkaiProgram {
+            output: Some(ProgramOutput::default()), // loudness=85 → ~-4dB
+            ..Default::default()
+        };
+        program.keygroups.push(Keygroup::default());
+
+        let xml = program.to_dspreset_string();
+        assert!(xml.contains("<groups volume=\""));
+        assert!(!xml.contains("<group name=\"Group1\" volume=")); // not per-group
+    }
+
+    #[test]
+    fn test_dspreset_amp_vel_track() {
+        let mut program = AkaiProgram {
+            output: Some(ProgramOutput { velocity_sensitivity: 25, ..Default::default() }),
+            ..Default::default()
+        };
+        program.keygroups.push(Keygroup::default());
+
+        let xml = program.to_dspreset_string();
+        assert!(xml.contains("ampVelTrack=\"0.50\"")); // 25/50 = 0.50
     }
 }

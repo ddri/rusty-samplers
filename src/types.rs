@@ -319,6 +319,53 @@ impl Default for Filter {
 
 // ---- Conversion helpers ----
 
+/// Shared envelope timing conversions for amp and filter envelopes.
+/// Both use identical exponential curves: attack/decay use exp(x*4)*0.001,
+/// release uses exp(x*5)*0.001 with 0.001s minimum to avoid clicks.
+pub trait EnvelopeTiming {
+    fn attack_raw(&self) -> u8;
+    fn decay_raw(&self) -> u8;
+    fn release_raw(&self) -> u8;
+    fn sustain_raw(&self) -> u8;
+
+    /// Convert AKP attack (0-100) to seconds (exponential curve).
+    fn attack_time(&self) -> f32 {
+        let v = self.attack_raw();
+        if v == 0 { 0.0 } else { (v as f32 / 100.0 * 4.0).exp() * 0.001 }
+    }
+
+    /// Convert AKP decay (0-100) to seconds (exponential curve).
+    fn decay_time(&self) -> f32 {
+        let v = self.decay_raw();
+        if v == 0 { 0.0 } else { (v as f32 / 100.0 * 4.0).exp() * 0.001 }
+    }
+
+    /// Convert AKP release (0-100) to seconds. Minimum 0.001s to avoid clicks.
+    fn release_time(&self) -> f32 {
+        let v = self.release_raw();
+        if v == 0 { 0.001 } else { (v as f32 / 100.0 * 5.0).exp() * 0.001 }
+    }
+
+    /// Convert AKP sustain (0-100) to normalized 0.0-1.0.
+    fn sustain_normalized(&self) -> f32 {
+        self.sustain_raw() as f32 / 100.0
+    }
+}
+
+impl EnvelopeTiming for Envelope {
+    fn attack_raw(&self) -> u8 { self.attack }
+    fn decay_raw(&self) -> u8 { self.decay }
+    fn release_raw(&self) -> u8 { self.release }
+    fn sustain_raw(&self) -> u8 { self.sustain }
+}
+
+impl EnvelopeTiming for FilterEnvelope {
+    fn attack_raw(&self) -> u8 { self.attack }
+    fn decay_raw(&self) -> u8 { self.decay }
+    fn release_raw(&self) -> u8 { self.release }
+    fn sustain_raw(&self) -> u8 { self.sustain }
+}
+
 impl Lfo {
     /// Convert AKP waveform byte to name. Spec: 0=SINE,1=TRI,2=SQ,3=SQ+,4=SQ-,5=SAW_BI,6=SAW_UP,7=SAW_DN,8=RANDOM
     pub fn waveform_name(&self) -> &'static str {
@@ -342,48 +389,10 @@ impl Lfo {
     }
 
     /// Convert AKP LFO depth (0-100) to normalized 0.0-1.0.
+    /// Used for pitch modulation: depth * 100 gives cents (0-100 cent range).
+    /// depth=1 → 1 cent (subtle vibrato), depth=99 → 99 cents (dramatic wobble).
     pub fn depth_normalized(&self) -> f32 {
         self.depth as f32 / 100.0
-    }
-}
-
-impl Envelope {
-    /// Convert AKP attack (0-100) to seconds (exponential curve).
-    pub fn attack_time(&self) -> f32 {
-        if self.attack == 0 { 0.0 } else { (self.attack as f32 / 100.0 * 4.0).exp() * 0.001 }
-    }
-
-    /// Convert AKP decay (0-100) to seconds (exponential curve).
-    pub fn decay_time(&self) -> f32 {
-        if self.decay == 0 { 0.0 } else { (self.decay as f32 / 100.0 * 4.0).exp() * 0.001 }
-    }
-
-    /// Convert AKP release (0-100) to seconds. Minimum 0.001s to avoid clicks.
-    pub fn release_time(&self) -> f32 {
-        if self.release == 0 { 0.001 } else { (self.release as f32 / 100.0 * 5.0).exp() * 0.001 }
-    }
-
-    /// Convert AKP sustain (0-100) to normalized 0.0-1.0.
-    pub fn sustain_normalized(&self) -> f32 {
-        self.sustain as f32 / 100.0
-    }
-}
-
-impl FilterEnvelope {
-    pub fn attack_time(&self) -> f32 {
-        if self.attack == 0 { 0.0 } else { (self.attack as f32 / 100.0 * 4.0).exp() * 0.001 }
-    }
-
-    pub fn decay_time(&self) -> f32 {
-        if self.decay == 0 { 0.0 } else { (self.decay as f32 / 100.0 * 4.0).exp() * 0.001 }
-    }
-
-    pub fn release_time(&self) -> f32 {
-        if self.release == 0 { 0.001 } else { (self.release as f32 / 100.0 * 5.0).exp() * 0.001 }
-    }
-
-    pub fn sustain_normalized(&self) -> f32 {
-        self.sustain as f32 / 100.0
     }
 }
 
@@ -416,5 +425,37 @@ impl Filter {
             17..=21 => "pkf_2p", // Peak variants
             _ => "lpf_2p",                    // Morphing, phaser, voweliser -> fallback
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_lfo_depth_normalized_boundaries() {
+        assert_eq!(Lfo { depth: 0, ..Default::default() }.depth_normalized(), 0.0);
+        assert!((Lfo { depth: 50, ..Default::default() }.depth_normalized() - 0.5).abs() < f32::EPSILON);
+        assert!((Lfo { depth: 100, ..Default::default() }.depth_normalized() - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_envelope_timing_trait_shared_behavior() {
+        let amp = Envelope { attack: 50, decay: 50, sustain: 80, release: 50, ..Default::default() };
+        let filt = FilterEnvelope { attack: 50, decay: 50, sustain: 80, release: 50, ..Default::default() };
+        // Same raw values produce identical timing
+        assert_eq!(amp.attack_time(), filt.attack_time());
+        assert_eq!(amp.decay_time(), filt.decay_time());
+        assert_eq!(amp.release_time(), filt.release_time());
+        assert_eq!(amp.sustain_normalized(), filt.sustain_normalized());
+    }
+
+    #[test]
+    fn test_envelope_timing_zero_values() {
+        let env = Envelope { attack: 0, decay: 0, sustain: 0, release: 0, ..Default::default() };
+        assert_eq!(env.attack_time(), 0.0);
+        assert_eq!(env.decay_time(), 0.0);
+        assert_eq!(env.sustain_normalized(), 0.0);
+        assert_eq!(env.release_time(), 0.001); // minimum to avoid clicks
     }
 }
