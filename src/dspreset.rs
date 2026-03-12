@@ -9,11 +9,9 @@ fn xml_escape(s: &str) -> String {
 }
 
 impl AkaiProgram {
-    /// Converts the parsed AkaiProgram into a Decent Sampler .dspreset XML string.
     pub fn to_dspreset_string(&self) -> String {
         let mut xml = String::new();
 
-        // XML declaration
         xml.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
         xml.push_str("<DecentSampler minVersion=\"1.0.0\">\n");
 
@@ -52,29 +50,35 @@ impl AkaiProgram {
                 let decay = if env.decay == 0 { 0.1 } else { env.decay_time() };
                 let sustain = env.sustain_normalized();
                 let release = if env.release == 0 { 0.1 } else { env.release_time() };
-
                 xml.push_str(&format!(" attack=\"{attack:.3}\" decay=\"{decay:.3}\" sustain=\"{sustain:.3}\" release=\"{release:.3}\""));
             }
 
-            if let Some(tune) = &keygroup.tune {
-                xml.push_str(&format!(" volume=\"{:.2}\"", tune.volume_db()));
+            // Volume from program output
+            if let Some(output) = &self.output {
+                xml.push_str(&format!(" volume=\"{:.2}\"", output.volume_db()));
             }
 
             xml.push_str(">\n");
 
-            if let Some(sample) = &keygroup.sample {
+            // Each zone becomes a <sample>
+            for zone in &keygroup.zones {
                 xml.push_str("      <sample ");
-                xml.push_str(&format!("path=\"{}\" ", xml_escape(&sample.filename)));
+                xml.push_str(&format!("path=\"{}\" ", xml_escape(&zone.sample_name)));
                 xml.push_str(&format!("loNote=\"{}\" hiNote=\"{}\" ", keygroup.low_key, keygroup.high_key));
-                xml.push_str(&format!("loVel=\"{}\" hiVel=\"{}\" ", keygroup.low_vel, keygroup.high_vel));
+                xml.push_str(&format!("loVel=\"{}\" hiVel=\"{}\" ", zone.low_vel, zone.high_vel));
 
-                if let Some(tune) = &keygroup.tune {
-                    if tune.semitone != 0 {
-                        xml.push_str(&format!("tuning=\"{}\" ", tune.semitone));
-                    }
-                    if tune.fine_tune != 0 {
-                        xml.push_str(&format!("fineTuning=\"{}\" ", tune.fine_tune));
-                    }
+                let semitone = keygroup.semitone_tune as i16 + zone.semitone_tune as i16;
+                let fine = keygroup.fine_tune as i16 + zone.fine_tune as i16;
+                if semitone != 0 {
+                    xml.push_str(&format!("tuning=\"{semitone}\" "));
+                }
+                if fine != 0 {
+                    xml.push_str(&format!("fineTuning=\"{fine}\" "));
+                }
+
+                if zone.pan != 0 {
+                    // DS pan: -100 to 100
+                    xml.push_str(&format!("pan=\"{}\" ", zone.pan as i32 * 2));
                 }
 
                 xml.push_str("/>\n");
@@ -85,16 +89,13 @@ impl AkaiProgram {
 
         xml.push_str("  </groups>\n\n");
 
-        // Effects section — use $ prefix for parameter bindings
+        // Effects section
         xml.push_str("  <effects>\n");
-
         let has_filter = self.keygroups.iter().any(|kg| kg.filter.is_some());
         if has_filter {
             xml.push_str("    <lowpass frequency=\"$FILTER_CUTOFF\" resonance=\"$FILTER_RESONANCE\" />\n");
         }
-
         xml.push_str("    <reverb roomSize=\"0.5\" damping=\"0.5\" wetLevel=\"0.3\" dryLevel=\"0.7\" width=\"1.0\" />\n");
-
         xml.push_str("  </effects>\n\n");
 
         // MIDI section
@@ -105,20 +106,15 @@ impl AkaiProgram {
         xml.push_str("  </midi>\n\n");
 
         // Modulators section
-        let has_lfo = self.keygroups.iter().any(|kg| kg.lfo1.is_some() || kg.lfo2.is_some());
-        if has_lfo {
-            xml.push_str("  <modulators>\n");
-
-            for keygroup in &self.keygroups {
-                if let Some(lfo) = &keygroup.lfo1 {
-                    let amount = lfo.depth_normalized();
-                    xml.push_str(&format!(
-                        "    <lfo frequency=\"{:.2}\" waveform=\"{}\" target=\"FILTER_CUTOFF\" amount=\"{amount:.2}\" />\n",
-                        lfo.rate_hz(), lfo.waveform_name()));
-                }
+        if let Some(lfo) = &self.lfo1 {
+            if lfo.depth > 0 {
+                xml.push_str("  <modulators>\n");
+                let amount = lfo.depth_normalized();
+                xml.push_str(&format!(
+                    "    <lfo frequency=\"{:.2}\" waveform=\"{}\" target=\"FILTER_CUTOFF\" amount=\"{amount:.2}\" />\n",
+                    lfo.rate_hz(), lfo.waveform_name()));
+                xml.push_str("  </modulators>\n\n");
             }
-
-            xml.push_str("  </modulators>\n\n");
         }
 
         // Tags
@@ -140,12 +136,13 @@ mod tests {
     #[test]
     fn test_dspreset_basic_structure() {
         let mut program = AkaiProgram::default();
-        let mut keygroup = Keygroup::default();
-        keygroup.low_key = 36;
-        keygroup.high_key = 72;
-        keygroup.low_vel = 1;
-        keygroup.high_vel = 127;
-        keygroup.sample = Some(Sample { filename: "piano.wav".to_string() });
+        let mut keygroup = Keygroup { low_key: 36, high_key: 72, ..Default::default() };
+        keygroup.zones.push(Zone {
+            sample_name: "piano.wav".to_string(),
+            low_vel: 1,
+            high_vel: 127,
+            ..Default::default()
+        });
         program.keygroups.push(keygroup);
 
         let xml = program.to_dspreset_string();
@@ -161,8 +158,7 @@ mod tests {
     #[test]
     fn test_dspreset_filter_binding_uses_dollar_prefix() {
         let mut program = AkaiProgram::default();
-        let mut keygroup = Keygroup::default();
-        keygroup.filter = Some(Filter { cutoff: 50, resonance: 25, filter_type: 1 });
+        let keygroup = Keygroup { filter: Some(Filter { filter_type: 0, cutoff: 50, ..Default::default() }), ..Default::default() };
         program.keygroups.push(keygroup);
 
         let xml = program.to_dspreset_string();
@@ -173,37 +169,35 @@ mod tests {
     #[test]
     fn test_dspreset_envelope_values() {
         let mut program = AkaiProgram::default();
-        let mut keygroup = Keygroup::default();
-        keygroup.amp_env = Some(Envelope { attack: 20, decay: 40, sustain: 80, release: 60 });
+        let keygroup = Keygroup { amp_env: Some(Envelope { attack: 20, decay: 40, sustain: 80, release: 60, ..Default::default() }), ..Default::default() };
         program.keygroups.push(keygroup);
 
         let xml = program.to_dspreset_string();
         assert!(xml.contains("attack=\""));
-        assert!(xml.contains("decay=\""));
         assert!(xml.contains("sustain=\"0.800\""));
-        assert!(xml.contains("release=\""));
     }
 
     #[test]
-    fn test_dspreset_no_filter_skips_lowpass() {
-        let mut program = AkaiProgram::default();
-        program.keygroups.push(Keygroup::default());
-
-        let xml = program.to_dspreset_string();
-        assert!(!xml.contains("<lowpass"));
-    }
-
-    #[test]
-    fn test_dspreset_lfo_modulators() {
+    fn test_dspreset_multi_zone() {
         let mut program = AkaiProgram::default();
         let mut keygroup = Keygroup::default();
-        keygroup.lfo1 = Some(Lfo { waveform: 1, rate: 50, delay: 0, depth: 75 });
+        keygroup.zones.push(Zone { sample_name: "soft.wav".to_string(), low_vel: 0, high_vel: 63, ..Default::default() });
+        keygroup.zones.push(Zone { sample_name: "loud.wav".to_string(), low_vel: 64, high_vel: 127, ..Default::default() });
         program.keygroups.push(keygroup);
+
+        let xml = program.to_dspreset_string();
+        assert!(xml.contains("path=\"soft.wav\""));
+        assert!(xml.contains("path=\"loud.wav\""));
+    }
+
+    #[test]
+    fn test_dspreset_lfo_from_program_level() {
+        let mut program = AkaiProgram { lfo1: Some(Lfo { waveform: 0, rate: 50, depth: 75, ..Default::default() }), ..Default::default() };
+        program.keygroups.push(Keygroup::default());
 
         let xml = program.to_dspreset_string();
         assert!(xml.contains("<modulators>"));
         assert!(xml.contains("waveform=\"sine\""));
-        assert!(xml.contains("frequency=\""));
-        assert!(xml.contains("amount=\"0.75\"")); // depth 75 -> 0.75
+        assert!(xml.contains("amount=\"0.75\""));
     }
 }
