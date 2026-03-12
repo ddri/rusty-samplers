@@ -91,6 +91,7 @@ impl Default for ProgramTuning {
 // ---- Lfo (lfo chunk, 12 bytes) ----
 
 #[derive(Debug)]
+#[derive(Default)]
 pub struct Lfo {
     pub waveform: u8,
     pub rate: u8,
@@ -105,23 +106,6 @@ pub struct Lfo {
     pub depth_mod: i8,
 }
 
-impl Default for Lfo {
-    fn default() -> Self {
-        Self {
-            waveform: 0,
-            rate: 0,
-            delay: 0,
-            depth: 0,
-            sync: 0,
-            retrigger: 0,
-            modwheel: 0,
-            aftertouch: 0,
-            rate_mod: 0,
-            delay_mod: 0,
-            depth_mod: 0,
-        }
-    }
-}
 
 // ---- ProgramModulation (mods chunk, 38 bytes) ----
 
@@ -424,12 +408,12 @@ impl Filter {
     /// Map Akai filter type (0-25) to SFZ fil_type opcode.
     pub fn sfz_filter_type(&self) -> &'static str {
         match self.filter_type {
-            0 | 1 | 2 => "lpf_2p",           // 2-pole LP, 4-pole LP, 2-pole LP+
-            3 | 4 | 5 => "bpf_2p",           // 2-pole BP, 4-pole BP, 2-pole BP+
+            0..=2 => "lpf_2p",           // 2-pole LP, 4-pole LP, 2-pole LP+
+            3..=5 => "bpf_2p",           // 2-pole BP, 4-pole BP, 2-pole BP+
             6 | 8 => "hpf_1p",               // 1-pole HP, 1-pole HP+
             7 => "hpf_2p",                    // 2-pole HP
-            12 | 13 | 14 | 15 | 16 => "brf_2p", // Notch variants
-            17 | 18 | 19 | 20 | 21 => "pkf_2p", // Peak variants
+            12..=16 => "brf_2p", // Notch variants
+            17..=21 => "pkf_2p", // Peak variants
             _ => "lpf_2p",                    // Morphing, phaser, voweliser -> fallback
         }
     }

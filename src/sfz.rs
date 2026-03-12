@@ -103,7 +103,7 @@ impl AkaiProgram {
                     if env.depth != 0 {
                         // Convert depth (-100..100) to cents
                         let depth_cents = env.depth as f32 / 100.0 * 9600.0;
-                        sfz.push_str(&format!("fileg_depth={:.0}\n", depth_cents));
+                        sfz.push_str(&format!("fileg_depth={depth_cents:.0}\n"));
                     }
                 }
 
