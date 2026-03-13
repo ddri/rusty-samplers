@@ -403,6 +403,60 @@ impl ProgramOutput {
     }
 }
 
+/// Map AKP modulation source (0-14) to SFZ opcode suffix.
+/// Returns the full suffix including connector: "_oncc1", "_chanaft", etc.
+/// This avoids invalid opcodes like "pitch_onbend" — bend and aftertouch
+/// use dedicated suffixes without the "on" prefix.
+/// Returns None for sources that don't map to a CC/controller.
+pub fn mod_source_sfz_suffix(source: u8) -> Option<&'static str> {
+    match source {
+        1 => Some("_oncc1"),    // MODWHEEL
+        2 => Some("_bend"),     // BEND (not "_onbend")
+        3 => Some("_chanaft"),  // AFTERTOUCH (not "_onchanaft")
+        4 => Some("_oncc16"),   // EXTERNAL (typically general purpose controller)
+        _ => None,              // NO_SOURCE, VELOCITY, KEYBOARD, LFOs, envelopes, deltas
+    }
+}
+
+/// Classify AKP modulation source (0-14) into a type category.
+pub fn mod_source_type(source: u8) -> &'static str {
+    match source {
+        0 => "none",
+        1..=4 => "cc",
+        5 => "velocity",
+        6 => "keyboard",
+        7 => "lfo1",
+        8 => "lfo2",
+        9 => "amp_env",
+        10 => "filt_env",
+        11 => "aux_env",
+        12..=14 => "delta",
+        _ => "unknown",
+    }
+}
+
+/// Human-readable name for an AKP modulation source.
+pub fn mod_source_name(source: u8) -> &'static str {
+    match source {
+        0 => "NO_SOURCE",
+        1 => "MODWHEEL",
+        2 => "BEND",
+        3 => "AFTERTOUCH",
+        4 => "EXTERNAL",
+        5 => "VELOCITY",
+        6 => "KEYBOARD",
+        7 => "LFO1",
+        8 => "LFO2",
+        9 => "AMP_ENV",
+        10 => "FILT_ENV",
+        11 => "AUX_ENV",
+        12 => "MIDI_NOTE",
+        13 => "MIDI_VELOCITY",
+        14 => "MIDI_RANDOM",
+        _ => "UNKNOWN",
+    }
+}
+
 impl Filter {
     /// Convert AKP cutoff (0-100) to Hz (20-20000, logarithmic).
     pub fn cutoff_hz(&self) -> f32 {

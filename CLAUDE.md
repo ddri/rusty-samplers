@@ -67,7 +67,7 @@ rusty-samplers/
 - `cd gui && cargo run`: Launch the GUI
 
 ### Test
-- `cargo test`: Run all tests (25 unit + 5 integration = 30 total)
+- `cargo test`: Run all tests (28 unit + 5 integration = 33 total)
 - `cargo test --lib`: Unit tests only
 - `cargo test --test integration_tests`: Integration tests only
 
@@ -79,12 +79,25 @@ rusty-samplers/
 - **Modulation**: Bipolar normalization with per-destination scale factors, 13 sources × 18 destinations (`src/sfz.rs`)
 - **Volume**: Linear mapping from AKP 0-100 to -60dB–+6dB range
 
+## Format Reference Sources
+
+The AKP format is used by Akai S5000/S6000 (and extended by Z4/Z8, MPC4000). Full research and byte-level details are in `docs/akp-format-reference.md`.
+
+Key references for parser development:
+- **Primary spec**: https://burnit.co.uk/AKPspec/ (reverse-engineered from S6000 OS v1.11)
+- **Spec mirror**: http://mda.smartelectronix.com/akai/AKPspec.html
+- **Reference parser**: https://github.com/git-moss/ConvertWithMoss (Java, most mature AKP parser)
+- **Test files**: `test_akp_files/` (4 S6000 factory AKP files), Internet Archive S6000 Volume 1
+
+Current project scope: **S5000/S6000 models only.**
+
 ## File Format Notes
 
 ### Input Format
 - RIFF-based AKP files with APRG signature
-- Nested chunk structure: prg > kgrp > zone > smpl/tune/filt/env/lfo/mods
+- Nested chunk structure: prg > kgrp > kloc/zone/smpl/tune/filt/env/lfo/mods
 - Little-endian binary data with specific parameter encoding
+- See `docs/akp-format-reference.md` for full chunk hierarchy and known enumerations
 
 ### Output Formats
 

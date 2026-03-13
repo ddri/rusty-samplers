@@ -1,4 +1,4 @@
-use crate::types::{AkaiProgram, EnvelopeTiming};
+use crate::types::{AkaiProgram, EnvelopeTiming, mod_source_name};
 
 fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;")
@@ -11,6 +11,12 @@ fn xml_escape(s: &str) -> String {
 impl AkaiProgram {
     pub fn to_dspreset_string(&self) -> String {
         let mut xml = String::new();
+
+        // Pre-compute filter state for UI and modulators sections
+        let has_filter = self.keygroups.iter().any(|kg| kg.filter.is_some());
+        let filter_env_ref = self.keygroups.iter()
+            .find_map(|kg| kg.filter_env.as_ref().filter(|env| env.depth != 0));
+        let has_filter_env = filter_env_ref.is_some();
 
         xml.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
         xml.push_str("<DecentSampler minVersion=\"1.0.0\">\n");
@@ -36,6 +42,37 @@ impl AkaiProgram {
         xml.push_str("      <labeled-knob x=\"510\" y=\"20\" width=\"90\" height=\"100\" parameterName=\"FILTER_RESONANCE\" type=\"float\" minValue=\"0\" maxValue=\"40\" value=\"0\" textColor=\"AA000000\">\n");
         xml.push_str("        <label text=\"Resonance\" x=\"0\" y=\"80\" width=\"90\" height=\"30\" />\n");
         xml.push_str("      </labeled-knob>\n");
+
+        // Filter envelope ADSR knobs (only when filter effect and filter env both present)
+        if has_filter && has_filter_env {
+            let fenv = filter_env_ref.unwrap();
+            let att_val = if fenv.attack == 0 { 0.001 } else { fenv.attack_time() };
+            let dec_val = if fenv.decay == 0 { 0.1 } else { fenv.decay_time() };
+            let sus_val = fenv.sustain_normalized();
+            let rel_val = if fenv.release == 0 { 0.1 } else { fenv.release_time() };
+
+            xml.push_str(&format!(
+                "      <labeled-knob x=\"10\" y=\"140\" width=\"90\" height=\"100\" parameterName=\"FILT_ENV_ATTACK\" type=\"float\" minValue=\"0\" maxValue=\"5\" value=\"{att_val:.2}\" textColor=\"AA000000\">\n"
+            ));
+            xml.push_str("        <label text=\"Filt Att\" x=\"0\" y=\"80\" width=\"90\" height=\"30\" />\n");
+            xml.push_str("      </labeled-knob>\n");
+            xml.push_str(&format!(
+                "      <labeled-knob x=\"110\" y=\"140\" width=\"90\" height=\"100\" parameterName=\"FILT_ENV_DECAY\" type=\"float\" minValue=\"0\" maxValue=\"5\" value=\"{dec_val:.2}\" textColor=\"AA000000\">\n"
+            ));
+            xml.push_str("        <label text=\"Filt Dec\" x=\"0\" y=\"80\" width=\"90\" height=\"30\" />\n");
+            xml.push_str("      </labeled-knob>\n");
+            xml.push_str(&format!(
+                "      <labeled-knob x=\"210\" y=\"140\" width=\"90\" height=\"100\" parameterName=\"FILT_ENV_SUSTAIN\" type=\"float\" minValue=\"0\" maxValue=\"1\" value=\"{sus_val:.2}\" textColor=\"AA000000\">\n"
+            ));
+            xml.push_str("        <label text=\"Filt Sus\" x=\"0\" y=\"80\" width=\"90\" height=\"30\" />\n");
+            xml.push_str("      </labeled-knob>\n");
+            xml.push_str(&format!(
+                "      <labeled-knob x=\"310\" y=\"140\" width=\"90\" height=\"100\" parameterName=\"FILT_ENV_RELEASE\" type=\"float\" minValue=\"0\" maxValue=\"10\" value=\"{rel_val:.2}\" textColor=\"AA000000\">\n"
+            ));
+            xml.push_str("        <label text=\"Filt Rel\" x=\"0\" y=\"80\" width=\"90\" height=\"30\" />\n");
+            xml.push_str("      </labeled-knob>\n");
+        }
+
         xml.push_str("    </tab>\n");
         xml.push_str("  </ui>\n\n");
 
@@ -99,7 +136,6 @@ impl AkaiProgram {
 
         // Effects section
         xml.push_str("  <effects>\n");
-        let has_filter = self.keygroups.iter().any(|kg| kg.filter.is_some());
         if has_filter {
             xml.push_str("    <lowpass frequency=\"$FILTER_CUTOFF\" resonance=\"$FILTER_RESONANCE\" />\n");
         }
@@ -113,16 +149,132 @@ impl AkaiProgram {
         xml.push_str("    <cc number=\"7\" parameter=\"MAIN_VOLUME\" />\n");
         xml.push_str("  </midi>\n\n");
 
-        // Modulators section
+        // Modulators section — collect all modulators, then wrap if non-empty
+        let mut mod_xml = String::new();
+
+        // LFO modulator
         if let Some(lfo) = &self.lfo1 {
             if lfo.depth > 0 {
-                xml.push_str("  <modulators>\n");
                 let amount = lfo.depth_normalized();
-                xml.push_str(&format!(
+                mod_xml.push_str(&format!(
                     "    <lfo frequency=\"{:.2}\" waveform=\"{}\" target=\"FILTER_CUTOFF\" amount=\"{amount:.2}\" />\n",
                     lfo.rate_hz(), lfo.waveform_name()));
-                xml.push_str("  </modulators>\n\n");
             }
+        }
+
+        // Filter envelope modulator (only when lowpass effect is present at effectIndex=0)
+        if has_filter && has_filter_env {
+            let fenv = filter_env_ref.unwrap();
+            let attack = if fenv.attack == 0 { 0.001 } else { fenv.attack_time() };
+            let decay = if fenv.decay == 0 { 0.1 } else { fenv.decay_time() };
+            let sustain = fenv.sustain_normalized();
+            let release = if fenv.release == 0 { 0.1 } else { fenv.release_time() };
+            let mod_amount = fenv.depth as f32 / 100.0;
+
+            mod_xml.push_str(&format!(
+                "    <envelope attack=\"{attack:.3}\" decay=\"{decay:.3}\" sustain=\"{sustain:.3}\" release=\"{release:.3}\" modAmount=\"{mod_amount:.2}\" scope=\"voice\">\n"
+            ));
+            mod_xml.push_str(
+                "      <binding type=\"effect\" level=\"instrument\" effectIndex=\"0\" parameter=\"FX_FILTER_FREQUENCY\" translation=\"table\" translationTable=\"0,33;0.3,150;0.4,450;0.5,1100;0.7,4100;0.9,11000;1.0,20000\" />\n"
+            );
+            mod_xml.push_str("    </envelope>\n");
+        }
+
+        // Modulation bindings from ProgramModulation
+        if let Some(mods) = &self.modulation {
+            // Velocity -> filter (filter_mod_1_source == 5)
+            if mods.filter_mod_1_source == 5 {
+                if let Some(filter) = self.keygroups.iter().find_map(|kg| kg.filter.as_ref()) {
+                    if filter.mod_input_1 != 0 {
+                        let amount = filter.mod_input_1 as f32 / 100.0;
+                        mod_xml.push_str(&format!(
+                            "    <velocity modAmount=\"{amount:.2}\">\n"
+                        ));
+                        mod_xml.push_str(
+                            "      <binding type=\"effect\" level=\"instrument\" effectIndex=\"0\" parameter=\"FX_FILTER_FREQUENCY\" />\n"
+                        );
+                        mod_xml.push_str("    </velocity>\n");
+                    }
+                }
+            }
+
+            // Modwheel -> pan (pan_mod_3_source == 1)
+            if mods.pan_mod_3_source == 1 {
+                if let Some(output) = &self.output {
+                    if output.pan_mod_3 > 0 {
+                        let amount = output.pan_mod_3 as f32 / 100.0;
+                        mod_xml.push_str(&format!(
+                            "    <cc number=\"1\" modAmount=\"{amount:.2}\">\n"
+                        ));
+                        mod_xml.push_str(
+                            "      <binding type=\"general\" level=\"instrument\" parameter=\"PAN\" />\n"
+                        );
+                        mod_xml.push_str("    </cc>\n");
+                    }
+                }
+            }
+
+            // Unsupported routes as XML comments
+            let routes: &[(u8, &str, u8)] = &[
+                (mods.amp_mod_1_source, "amp_mod_1", self.output.as_ref().map_or(0, |o| o.amp_mod_1)),
+                (mods.amp_mod_2_source, "amp_mod_2", self.output.as_ref().map_or(0, |o| o.amp_mod_2)),
+                (mods.pan_mod_1_source, "pan_mod_1", self.output.as_ref().map_or(0, |o| o.pan_mod_1)),
+                (mods.pan_mod_2_source, "pan_mod_2", self.output.as_ref().map_or(0, |o| o.pan_mod_2)),
+            ];
+
+            for &(source, dest, amount) in routes {
+                if source != 0 && amount != 0 {
+                    mod_xml.push_str(&format!(
+                        "    <!-- AKP modulation: {} \u{2192} {} (amount={}, not supported in DS) -->\n",
+                        mod_source_name(source), dest, amount
+                    ));
+                }
+            }
+
+            // Also check pan_mod_3 for unsupported sources (not modwheel)
+            if mods.pan_mod_3_source != 0 && mods.pan_mod_3_source != 1 {
+                if let Some(output) = &self.output {
+                    if output.pan_mod_3 > 0 {
+                        mod_xml.push_str(&format!(
+                            "    <!-- AKP modulation: {} \u{2192} pan_mod_3 (amount={}, not supported in DS) -->\n",
+                            mod_source_name(mods.pan_mod_3_source), output.pan_mod_3
+                        ));
+                    }
+                }
+            }
+
+            // Check filter mod sources for unsupported (not velocity)
+            let filter_routes: &[(u8, &str, i8)] = &[
+                (mods.filter_mod_2_source, "filter_mod_2", self.keygroups.first().and_then(|kg| kg.filter.as_ref()).map_or(0, |f| f.mod_input_2)),
+                (mods.filter_mod_3_source, "filter_mod_3", self.keygroups.first().and_then(|kg| kg.filter.as_ref()).map_or(0, |f| f.mod_input_3)),
+            ];
+
+            for &(source, dest, amount) in filter_routes {
+                if source != 0 && amount != 0 {
+                    mod_xml.push_str(&format!(
+                        "    <!-- AKP modulation: {} \u{2192} {} (amount={}, not supported in DS) -->\n",
+                        mod_source_name(source), dest, amount
+                    ));
+                }
+            }
+
+            // Check filter_mod_1 for unsupported sources (not velocity)
+            if mods.filter_mod_1_source != 0 && mods.filter_mod_1_source != 5 {
+                if let Some(filter) = self.keygroups.first().and_then(|kg| kg.filter.as_ref()) {
+                    if filter.mod_input_1 != 0 {
+                        mod_xml.push_str(&format!(
+                            "    <!-- AKP modulation: {} \u{2192} filter_mod_1 (amount={}, not supported in DS) -->\n",
+                            mod_source_name(mods.filter_mod_1_source), filter.mod_input_1
+                        ));
+                    }
+                }
+            }
+        }
+
+        if !mod_xml.is_empty() {
+            xml.push_str("  <modulators>\n");
+            xml.push_str(&mod_xml);
+            xml.push_str("  </modulators>\n\n");
         }
 
         // Tags
@@ -232,5 +384,86 @@ mod tests {
 
         let xml = program.to_dspreset_string();
         assert!(xml.contains("ampVelTrack=\"0.25\"")); // 25/100 = 0.25
+    }
+
+    #[test]
+    fn test_dspreset_filter_envelope_modulator() {
+        let mut program = AkaiProgram::default();
+        program.keygroups.push(Keygroup {
+            filter_env: Some(FilterEnvelope {
+                attack: 10,
+                decay: 30,
+                sustain: 70,
+                release: 20,
+                depth: 50,
+                ..Default::default()
+            }),
+            filter: Some(Filter::default()),
+            ..Default::default()
+        });
+
+        let xml = program.to_dspreset_string();
+        assert!(xml.contains("<envelope"), "Should contain envelope modulator");
+        assert!(xml.contains("modAmount=\"0.50\""), "modAmount should be depth/100");
+        assert!(xml.contains("FX_FILTER_FREQUENCY"), "Should target filter frequency");
+        assert!(xml.contains("scope=\"voice\""), "Should have voice scope");
+        assert!(xml.contains("translationTable="), "Should have translation table for frequency");
+    }
+
+    #[test]
+    fn test_dspreset_filter_envelope_knobs() {
+        let mut program = AkaiProgram::default();
+        program.keygroups.push(Keygroup {
+            filter_env: Some(FilterEnvelope {
+                attack: 10,
+                decay: 30,
+                sustain: 70,
+                release: 20,
+                depth: 50,
+                ..Default::default()
+            }),
+            filter: Some(Filter::default()),
+            ..Default::default()
+        });
+
+        let xml = program.to_dspreset_string();
+        assert!(xml.contains("FILT_ENV_ATTACK"), "Should have filter env attack knob");
+        assert!(xml.contains("Filt Att"), "Should have filter attack label");
+        assert!(xml.contains("Filt Dec"), "Should have filter decay label");
+        assert!(xml.contains("Filt Sus"), "Should have filter sustain label");
+        assert!(xml.contains("Filt Rel"), "Should have filter release label");
+    }
+
+    #[test]
+    fn test_dspreset_modulation_bindings() {
+        let mut program = AkaiProgram {
+            modulation: Some(ProgramModulation {
+                filter_mod_1_source: 5, // VELOCITY
+                pan_mod_3_source: 1,    // MODWHEEL
+                amp_mod_2_source: 3,    // AFTERTOUCH (unsupported in DS)
+                ..Default::default()
+            }),
+            output: Some(ProgramOutput {
+                pan_mod_3: 50,
+                amp_mod_2: 20,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        program.keygroups.push(Keygroup {
+            filter: Some(Filter { mod_input_1: 30, ..Default::default() }),
+            ..Default::default()
+        });
+
+        let xml = program.to_dspreset_string();
+        // Velocity -> filter
+        assert!(xml.contains("<velocity"), "Should have velocity modulator");
+        assert!(xml.contains("modAmount=\"0.30\""), "Velocity modAmount should be mod_input_1/100");
+        // Modwheel -> pan
+        assert!(xml.contains("<cc number=\"1\""), "Should have CC1 modulator for modwheel");
+        assert!(xml.contains("parameter=\"PAN\""), "Modwheel should target PAN");
+        // Unsupported route as comment
+        assert!(xml.contains("<!-- AKP modulation: AFTERTOUCH"), "Unsupported routes should be XML comments");
+        assert!(xml.contains("not supported in DS"), "Comment should mention DS limitation");
     }
 }
