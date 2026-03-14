@@ -425,10 +425,15 @@ pub fn parse_zone_chunk(cursor: &mut Cursor<Vec<u8>>, chunk_size: u32) -> Result
     cursor.read_exact(&mut name_buf)?;
     let end = name_buf.iter().position(|&b| b == 0).unwrap_or(name_len.min(20));
     let raw_filename = String::from_utf8_lossy(&name_buf[..end]).to_string();
-    let sample_name = sanitize_sample_path(&raw_filename);
+    let mut sample_name = sanitize_sample_path(&raw_filename);
 
     if sample_name.is_empty() {
         return Ok(None);
+    }
+
+    // AKP stores sample names without file extension — append .wav
+    if !sample_name.contains('.') {
+        sample_name.push_str(".wav");
     }
 
     // Read remaining fields at their spec offsets
@@ -529,7 +534,7 @@ mod tests {
         let data = make_zone_data(b"ABCDEFGHIJKLMNOPQRST", 1, 127);
         let mut cursor = Cursor::new(data);
         let zone = parse_zone_chunk(&mut cursor, 48).unwrap().unwrap();
-        assert_eq!(zone.sample_name, "ABCDEFGHIJKLMNOPQRST");
+        assert_eq!(zone.sample_name, "ABCDEFGHIJKLMNOPQRST.wav");
     }
 
     #[test]
