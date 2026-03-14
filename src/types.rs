@@ -397,9 +397,13 @@ impl Lfo {
 }
 
 impl ProgramOutput {
-    /// Convert AKP loudness (0-100) to dB. 0=-60dB, 85=0dB approx, 100=+6dB.
+    /// Convert AKP loudness (0-100) to dB. Loudness is a linear gain percentage,
+    /// so dB = 20 * log10(loudness / 100). Loudness=100 → 0dB, 85 → -1.4dB, 50 → -6dB.
     pub fn volume_db(&self) -> f32 {
-        (self.loudness as f32 / 100.0) * 66.0 - 60.0
+        if self.loudness == 0 {
+            return -60.0;
+        }
+        20.0 * (self.loudness as f32 / 100.0).log10()
     }
 }
 
