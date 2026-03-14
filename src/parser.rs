@@ -432,7 +432,10 @@ pub fn parse_zone_chunk(cursor: &mut Cursor<Vec<u8>>, chunk_size: u32) -> Result
     }
 
     // AKP stores sample names without file extension — append .wav
-    if !sample_name.contains('.') {
+    // Only skip if the name already ends with a known audio extension
+    let has_audio_ext = sample_name.rsplit('.').next()
+        .is_some_and(|ext| matches!(ext.to_ascii_lowercase().as_str(), "wav" | "aif" | "aiff" | "flac" | "ogg" | "mp3"));
+    if !has_audio_ext {
         sample_name.push_str(".wav");
     }
 
