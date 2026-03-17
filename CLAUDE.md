@@ -67,7 +67,7 @@ rusty-samplers/
 - `cd gui && cargo run`: Launch the GUI
 
 ### Test
-- `cargo test`: Run all tests (28 unit + 5 integration = 33 total)
+- `cargo test`: Run all tests (77 unit + 5 integration = 82 total)
 - `cargo test --lib`: Unit tests only
 - `cargo test --test integration_tests`: Integration tests only
 
@@ -77,7 +77,7 @@ rusty-samplers/
 - **Filter Cutoff**: Logarithmic scaling from AKP 0-100 to 20Hz–20kHz (`src/sfz.rs`)
 - **LFO Rate**: Logarithmic conversion to 0.1Hz–30Hz (`src/sfz.rs`)
 - **Modulation**: Bipolar normalization with per-destination scale factors, 13 sources × 18 destinations (`src/sfz.rs`)
-- **Volume**: Linear mapping from AKP 0-100 to -60dB–+6dB range
+- **Volume**: Logarithmic conversion — `20 * log10(loudness/100)`, with loudness=0 floored to -60dB
 
 ## Format Reference Sources
 
@@ -87,7 +87,7 @@ Key references for parser development:
 - **Primary spec**: https://burnit.co.uk/AKPspec/ (reverse-engineered from S6000 OS v1.11)
 - **Spec mirror**: http://mda.smartelectronix.com/akai/AKPspec.html
 - **Reference parser**: https://github.com/git-moss/ConvertWithMoss (Java, most mature AKP parser)
-- **Test files**: `test_akp_files/` (4 S6000 factory AKP files), Internet Archive S6000 Volume 1
+- **Test files**: `test_akp_files/` (4 S6000 factory AKP files). Tested against 2,648 files from all 6 Internet Archive S6000 volumes (99.96% pass rate).
 
 Current project scope: **S5000/S6000 models only.**
 
@@ -95,7 +95,7 @@ Current project scope: **S5000/S6000 models only.**
 
 ### Input Format
 - RIFF-based AKP files with APRG signature
-- Nested chunk structure: prg > kgrp > kloc/zone/smpl/tune/filt/env/lfo/mods
+- Nested chunk structure: prg/out/tune/lfo/mods (top-level) > kgrp > kloc/zone/env/filt
 - Little-endian binary data with specific parameter encoding
 - See `docs/akp-format-reference.md` for full chunk hierarchy and known enumerations
 
