@@ -424,7 +424,7 @@ pub fn parse_zone_chunk(cursor: &mut Cursor<Vec<u8>>, chunk_size: u32) -> Result
     let mut name_buf = [0u8; 20];
     cursor.read_exact(&mut name_buf)?;
     let end = name_buf.iter().position(|&b| b == 0).unwrap_or(name_len.min(20));
-    let raw_filename = String::from_utf8_lossy(&name_buf[..end]).to_string();
+    let raw_filename = String::from_utf8_lossy(&name_buf[..end]).trim().to_string();
     let mut sample_name = sanitize_sample_path(&raw_filename);
 
     if sample_name.is_empty() {
