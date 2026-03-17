@@ -44,3 +44,6 @@ test_sample.akp
 test_runner
 *.sfz
 *.dspreset
+
+# Reference files for diff tool (manually exported from ConvertWithMoss)
+tools/reference_sfz/

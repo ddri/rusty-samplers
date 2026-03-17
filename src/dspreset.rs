@@ -434,6 +434,76 @@ mod tests {
         assert!(xml.contains("Filt Rel"), "Should have filter release label");
     }
 
+    // ---- Output validation tests ----
+
+    #[test]
+    fn test_dspreset_output_passes_validation() {
+        use crate::validate::validate_dspreset;
+
+        let mut program = AkaiProgram::default();
+        let mut keygroup = Keygroup {
+            low_key: 36, high_key: 72,
+            amp_env: Some(Envelope { attack: 20, decay: 40, sustain: 80, release: 60, ..Default::default() }),
+            filter: Some(Filter { filter_type: 0, cutoff: 50, resonance: 6, ..Default::default() }),
+            filter_env: Some(FilterEnvelope { attack: 10, decay: 30, sustain: 70, release: 20, depth: 50, ..Default::default() }),
+            ..Default::default()
+        };
+        keygroup.zones.push(Zone { sample_name: "Piano_C3.wav".to_string(), low_vel: 1, high_vel: 127, ..Default::default() });
+        program.keygroups.push(keygroup);
+        program.output = Some(ProgramOutput::default());
+        program.lfo1 = Some(Lfo { rate: 50, depth: 25, ..Default::default() });
+
+        let xml = program.to_dspreset_string();
+        let errors = validate_dspreset(&xml);
+        assert!(errors.is_empty(), "Validation errors in dspreset output:\n{}\n---\n{xml}", errors.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n"));
+    }
+
+    #[test]
+    fn test_dspreset_boundary_values_pass_validation() {
+        use crate::validate::validate_dspreset;
+
+        let mut program = AkaiProgram::default();
+
+        // Extreme values
+        let mut kg1 = Keygroup {
+            low_key: 0, high_key: 127,
+            amp_env: Some(Envelope { attack: 0, decay: 0, sustain: 0, release: 0, ..Default::default() }),
+            ..Default::default()
+        };
+        kg1.zones.push(Zone { sample_name: "test.wav".to_string(), low_vel: 0, high_vel: 127, ..Default::default() });
+        program.keygroups.push(kg1);
+
+        let mut kg2 = Keygroup {
+            low_key: 0, high_key: 127,
+            amp_env: Some(Envelope { attack: 100, decay: 100, sustain: 100, release: 100, ..Default::default() }),
+            ..Default::default()
+        };
+        kg2.zones.push(Zone { sample_name: "test2.wav".to_string(), low_vel: 0, high_vel: 127, ..Default::default() });
+        program.keygroups.push(kg2);
+
+        // Loudness extremes
+        program.output = Some(ProgramOutput { loudness: 100, ..Default::default() });
+
+        let xml = program.to_dspreset_string();
+        let errors = validate_dspreset(&xml);
+        assert!(errors.is_empty(), "Validation errors with boundary values:\n{}\n---\n{xml}", errors.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n"));
+    }
+
+    #[test]
+    fn test_dspreset_zero_loudness_pass_validation() {
+        use crate::validate::validate_dspreset;
+
+        let mut program = AkaiProgram::default();
+        let mut keygroup = Keygroup::default();
+        keygroup.zones.push(Zone { sample_name: "test.wav".to_string(), ..Default::default() });
+        program.keygroups.push(keygroup);
+        program.output = Some(ProgramOutput { loudness: 0, ..Default::default() });
+
+        let xml = program.to_dspreset_string();
+        let errors = validate_dspreset(&xml);
+        assert!(errors.is_empty(), "Validation errors with zero loudness:\n{}\n---\n{xml}", errors.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n"));
+    }
+
     #[test]
     fn test_dspreset_modulation_bindings() {
         let mut program = AkaiProgram {

@@ -3,6 +3,7 @@ pub mod types;
 pub mod parser;
 pub mod sfz;
 pub mod dspreset;
+pub mod validate;
 
 pub use error::{AkpError, Result};
 pub use types::{AkaiProgram, OutputFormat};

@@ -616,6 +616,81 @@ mod tests {
         assert!(sfz.contains("pan_oncc1=50"), "Missing pan_oncc1: {sfz}");
     }
 
+    // ---- Output validation tests ----
+
+    #[test]
+    fn test_sfz_output_passes_validation() {
+        use crate::validate::validate_sfz;
+
+        let mut program = AkaiProgram::default();
+        let mut keygroup = Keygroup {
+            low_key: 36, high_key: 72,
+            amp_env: Some(Envelope { attack: 20, decay: 40, sustain: 80, release: 60, ..Default::default() }),
+            filter: Some(Filter { filter_type: 0, cutoff: 50, resonance: 6, ..Default::default() }),
+            filter_env: Some(FilterEnvelope { attack: 10, decay: 30, sustain: 70, release: 20, depth: 50, ..Default::default() }),
+            ..Default::default()
+        };
+        keygroup.zones.push(Zone { sample_name: "Piano_C3.wav".to_string(), low_vel: 1, high_vel: 127, ..Default::default() });
+        program.keygroups.push(keygroup);
+        program.output = Some(ProgramOutput::default());
+        program.tuning = Some(ProgramTuning::default());
+        program.lfo1 = Some(Lfo { rate: 50, depth: 25, ..Default::default() });
+
+        let sfz = program.to_sfz_string();
+        let errors = validate_sfz(&sfz);
+        assert!(errors.is_empty(), "Validation errors in SFZ output:\n{}\n---\n{sfz}", errors.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n"));
+    }
+
+    #[test]
+    fn test_sfz_boundary_values_pass_validation() {
+        use crate::validate::validate_sfz;
+
+        // Extreme but valid parameter values
+        let mut program = AkaiProgram::default();
+
+        // Keygroup at MIDI extremes
+        let mut keygroup = Keygroup {
+            low_key: 0, high_key: 127,
+            amp_env: Some(Envelope { attack: 0, decay: 0, sustain: 0, release: 0, ..Default::default() }),
+            filter: Some(Filter { filter_type: 0, cutoff: 0, resonance: 0, ..Default::default() }),
+            ..Default::default()
+        };
+        keygroup.zones.push(Zone { sample_name: "test.wav".to_string(), low_vel: 0, high_vel: 127, ..Default::default() });
+        program.keygroups.push(keygroup);
+
+        // Max values
+        let mut keygroup2 = Keygroup {
+            low_key: 0, high_key: 127,
+            amp_env: Some(Envelope { attack: 100, decay: 100, sustain: 100, release: 100, ..Default::default() }),
+            filter: Some(Filter { filter_type: 0, cutoff: 100, resonance: 12, ..Default::default() }),
+            ..Default::default()
+        };
+        keygroup2.zones.push(Zone { sample_name: "test2.wav".to_string(), low_vel: 0, high_vel: 127, ..Default::default() });
+        program.keygroups.push(keygroup2);
+
+        // Volume extremes
+        program.output = Some(ProgramOutput { loudness: 100, ..Default::default() });
+
+        let sfz = program.to_sfz_string();
+        let errors = validate_sfz(&sfz);
+        assert!(errors.is_empty(), "Validation errors with boundary values:\n{}\n---\n{sfz}", errors.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n"));
+    }
+
+    #[test]
+    fn test_sfz_zero_loudness_pass_validation() {
+        use crate::validate::validate_sfz;
+
+        let mut program = AkaiProgram::default();
+        let mut keygroup = Keygroup::default();
+        keygroup.zones.push(Zone { sample_name: "test.wav".to_string(), ..Default::default() });
+        program.keygroups.push(keygroup);
+        program.output = Some(ProgramOutput { loudness: 0, ..Default::default() });
+
+        let sfz = program.to_sfz_string();
+        let errors = validate_sfz(&sfz);
+        assert!(errors.is_empty(), "Validation errors with zero loudness:\n{}\n---\n{sfz}", errors.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n"));
+    }
+
     #[test]
     fn test_sfz_pitch_envelope_from_aux_env() {
         // When pitch_mod_2_source=11 (AUX_ENV) and aux_env exists, emit pitcheg_* opcodes

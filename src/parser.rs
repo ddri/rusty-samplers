@@ -431,12 +431,13 @@ pub fn parse_zone_chunk(cursor: &mut Cursor<Vec<u8>>, chunk_size: u32) -> Result
         return Ok(None);
     }
 
-    // AKP stores sample names without file extension — append .wav
-    // Only skip if the name already ends with a known audio extension
+    // AKP stores sample names without file extension — append .WAV
+    // Using uppercase to match Akai convention (S6000 factory WAVs are .WAV).
+    // Lowercase .wav silently works on macOS but breaks on case-sensitive filesystems (Linux).
     let has_audio_ext = sample_name.rsplit('.').next()
         .is_some_and(|ext| matches!(ext.to_ascii_lowercase().as_str(), "wav" | "aif" | "aiff" | "flac" | "ogg" | "mp3"));
     if !has_audio_ext {
-        sample_name.push_str(".wav");
+        sample_name.push_str(".WAV");
     }
 
     // Read remaining fields at their spec offsets
@@ -537,7 +538,7 @@ mod tests {
         let data = make_zone_data(b"ABCDEFGHIJKLMNOPQRST", 1, 127);
         let mut cursor = Cursor::new(data);
         let zone = parse_zone_chunk(&mut cursor, 48).unwrap().unwrap();
-        assert_eq!(zone.sample_name, "ABCDEFGHIJKLMNOPQRST.wav");
+        assert_eq!(zone.sample_name, "ABCDEFGHIJKLMNOPQRST.WAV");
     }
 
     #[test]
