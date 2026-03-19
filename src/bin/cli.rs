@@ -64,13 +64,8 @@ fn run_batch_conversion(directory: &Path, format: OutputFormat) -> Result<()> {
     }
 
     let mut akp_files = Vec::new();
-    for entry in fs::read_dir(directory)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.extension().and_then(|s| s.to_str()) == Some("akp") {
-            akp_files.push(path);
-        }
-    }
+    collect_akp_files(directory, &mut akp_files)?;
+    akp_files.sort();
 
     if akp_files.is_empty() {
         println!("No .akp files found in directory: {}", directory.display());
@@ -129,6 +124,22 @@ fn run_batch_conversion(directory: &Path, format: OutputFormat) -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+fn collect_akp_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_akp_files(&path, files)?;
+        } else if path.extension()
+            .and_then(|s| s.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("akp"))
+        {
+            files.push(path);
+        }
+    }
     Ok(())
 }
 
