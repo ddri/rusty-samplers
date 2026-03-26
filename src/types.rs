@@ -317,6 +317,22 @@ impl Default for Filter {
     }
 }
 
+impl AkaiProgram {
+    /// Collect unique sample paths from all zones across all keygroups.
+    pub fn sample_paths(&self) -> Vec<&str> {
+        let mut seen = std::collections::HashSet::new();
+        let mut paths = Vec::new();
+        for kg in &self.keygroups {
+            for zone in &kg.zones {
+                if !zone.sample_name.is_empty() && seen.insert(zone.sample_name.as_str()) {
+                    paths.push(zone.sample_name.as_str());
+                }
+            }
+        }
+        paths
+    }
+}
+
 // ---- Conversion helpers ----
 
 /// Shared envelope timing conversions for amp and filter envelopes.

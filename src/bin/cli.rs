@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
 
-use rusty_samplers::{AkpError, AkaiProgram, OutputFormat, Result};
+use rusty_samplers::{AkpError, AkaiProgram, OutputFormat, Result, CopyConfig, copy_samples};
 use rusty_samplers::parser::{validate_riff_header, parse_top_level_chunks};
 
 #[derive(Parser)]
@@ -23,6 +23,14 @@ struct Cli {
     /// Batch convert all .akp files in a directory
     #[arg(short, long)]
     batch: bool,
+
+    /// Copy referenced sample files alongside the output preset
+    #[arg(long)]
+    copy_samples: bool,
+
+    /// Directory to search for source sample files (default: same as input)
+    #[arg(long)]
+    sample_dir: Option<PathBuf>,
 }
 
 fn parse_format(s: &str) -> std::result::Result<OutputFormat, String> {
@@ -37,9 +45,9 @@ fn main() {
     let cli = Cli::parse();
 
     let result = if cli.batch {
-        run_batch_conversion(&cli.input, cli.format)
+        run_batch_conversion(&cli.input, cli.format, cli.copy_samples, cli.sample_dir.as_deref())
     } else {
-        run_conversion(&cli.input, cli.format)
+        run_conversion(&cli.input, cli.format, cli.copy_samples, cli.sample_dir.as_deref())
     };
 
     if let Err(e) = result {
@@ -48,7 +56,7 @@ fn main() {
     }
 }
 
-fn run_batch_conversion(directory: &Path, format: OutputFormat) -> Result<()> {
+fn run_batch_conversion(directory: &Path, format: OutputFormat, do_copy_samples: bool, sample_dir: Option<&Path>) -> Result<()> {
     if !directory.exists() {
         return Err(AkpError::Io(io::Error::new(
             io::ErrorKind::NotFound,
@@ -92,7 +100,7 @@ fn run_batch_conversion(directory: &Path, format: OutputFormat) -> Result<()> {
         let file_name = akp_file.file_name().unwrap_or(akp_file.as_os_str()).to_string_lossy();
         batch_progress.set_message(format!("Processing {file_name}"));
 
-        match run_conversion(akp_file, format) {
+        match run_conversion(akp_file, format, do_copy_samples, sample_dir) {
             Ok(()) => {
                 success_count += 1;
                 batch_progress.println(format!("OK: {file_name}"));
@@ -143,7 +151,7 @@ fn collect_akp_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
     Ok(())
 }
 
-fn run_conversion(file_path: &Path, format: OutputFormat) -> Result<()> {
+fn run_conversion(file_path: &Path, format: OutputFormat, do_copy_samples: bool, sample_dir: Option<&Path>) -> Result<()> {
     if !file_path.exists() {
         return Err(AkpError::Io(io::Error::new(
             io::ErrorKind::NotFound,
@@ -199,6 +207,21 @@ fn run_conversion(file_path: &Path, format: OutputFormat) -> Result<()> {
     fs::write(&output_path, output_content)?;
 
     progress.finish_with_message(format!("Created {}", output_path.display()));
+
+    if do_copy_samples {
+        let search = sample_dir
+            .unwrap_or_else(|| file_path.parent().unwrap_or(Path::new(".")));
+        let output_dir = output_path.parent().unwrap_or(Path::new("."));
+        let sample_paths = program.sample_paths();
+        let path_refs: Vec<&str> = sample_paths.to_vec();
+        let config = CopyConfig {
+            search_dir: search,
+            output_dir,
+            sample_paths: &path_refs,
+        };
+        let report = copy_samples(&config);
+        println!("Samples: {}", report.summary());
+    }
 
     Ok(())
 }

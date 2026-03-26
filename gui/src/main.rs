@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 use std::thread;
 
-use rusty_samplers::OutputFormat;
+use rusty_samplers::{OutputFormat, CopyConfig, copy_samples};
 
 // Color palette
 const ACCENT: egui::Color32 = egui::Color32::from_rgb(90, 140, 255);
@@ -35,6 +35,10 @@ pub struct RustySamplersApp {
     // Batch mode
     batch_mode: bool,
     output_directory: Option<PathBuf>,
+
+    // Sample copying
+    copy_samples: bool,
+    sample_source_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone)]
@@ -52,6 +56,7 @@ pub struct ConversionResult {
     pub output_file: Option<PathBuf>,
     pub success: bool,
     pub message: String,
+    pub sample_summary: Option<String>,
 }
 
 fn section_heading(ui: &mut egui::Ui, text: &str) {
@@ -318,6 +323,34 @@ impl eframe::App for RustySamplersApp {
                 });
             }
 
+            ui.add_space(12.0);
+
+            // ── Sample copying ──
+            ui.horizontal(|ui| {
+                ui.add_space(4.0);
+                ui.checkbox(&mut self.copy_samples, egui::RichText::new("Copy samples alongside output").color(MUTED));
+            });
+
+            if self.copy_samples {
+                ui.horizontal(|ui| {
+                    ui.add_space(24.0);
+                    if ui.small_button("Sample source...").clicked() {
+                        if let Some(dir) = rfd::FileDialog::new()
+                            .set_title("Select Sample Source Directory")
+                            .pick_folder()
+                        {
+                            self.sample_source_dir = Some(dir);
+                        }
+                    }
+                    ui.add_space(4.0);
+                    if let Some(dir) = &self.sample_source_dir {
+                        ui.label(egui::RichText::new(format!("{}", dir.display())).size(12.0));
+                    } else {
+                        ui.label(egui::RichText::new("Default: same as input file").color(MUTED).size(12.0));
+                    }
+                });
+            }
+
             ui.add_space(20.0);
 
             // ── Results section ──
@@ -358,6 +391,11 @@ impl eframe::App for RustySamplersApp {
                         if !result.message.is_empty() && !result.success {
                             ui.indent("result_msg", |ui| {
                                 ui.label(egui::RichText::new(&result.message).color(MUTED).size(11.0));
+                            });
+                        }
+                        if let Some(summary) = &result.sample_summary {
+                            ui.indent("sample_msg", |ui| {
+                                ui.label(egui::RichText::new(format!("Samples: {summary}")).color(MUTED).size(11.0));
                             });
                         }
                     }
@@ -432,6 +470,8 @@ impl RustySamplersApp {
         let files = self.selected_files.clone();
         let format = self.output_format;
         let output_dir = self.output_directory.clone();
+        let do_copy_samples = self.copy_samples;
+        let sample_source_dir = self.sample_source_dir.clone();
 
         thread::spawn(move || {
             let _ = tx.send(ConversionProgress::Started("Starting conversion...".to_string()));
@@ -445,52 +485,70 @@ impl RustySamplersApp {
                 );
                 let _ = tx.send(ConversionProgress::Progress(progress_msg, i as f32 / files.len() as f32));
 
-                let conversion_result = rusty_samplers::convert_file(file_path, format);
-                let success = conversion_result.is_ok();
+                let conversion_result = rusty_samplers::convert_file_with_program(file_path, format);
 
-                let result = if success {
-                    let output_file = if let Some(dir) = &output_dir {
-                        let filename = file_path.file_stem().unwrap_or(file_path.as_os_str());
-                        let extension = match format {
-                            OutputFormat::Sfz => "sfz",
-                            OutputFormat::DecentSampler => "dspreset",
+                let result = match conversion_result {
+                    Ok((content, program)) => {
+                        let output_file = if let Some(dir) = &output_dir {
+                            let filename = file_path.file_stem().unwrap_or(file_path.as_os_str());
+                            let extension = match format {
+                                OutputFormat::Sfz => "sfz",
+                                OutputFormat::DecentSampler => "dspreset",
+                            };
+                            dir.join(format!("{}.{}", filename.to_string_lossy(), extension))
+                        } else {
+                            match format {
+                                OutputFormat::Sfz => file_path.with_extension("sfz"),
+                                OutputFormat::DecentSampler => file_path.with_extension("dspreset"),
+                            }
                         };
-                        dir.join(format!("{}.{}", filename.to_string_lossy(), extension))
-                    } else {
-                        match format {
-                            OutputFormat::Sfz => file_path.with_extension("sfz"),
-                            OutputFormat::DecentSampler => file_path.with_extension("dspreset"),
+
+                        let write_result = std::fs::write(&output_file, content).map_err(|e| e.to_string());
+
+                        let final_success = write_result.is_ok();
+
+                        let sample_summary = if final_success && do_copy_samples {
+                            let search = sample_source_dir.as_deref()
+                                .unwrap_or_else(|| file_path.parent().unwrap_or(std::path::Path::new(".")));
+                            let out = output_file.parent().unwrap_or(std::path::Path::new("."));
+                            let sample_paths = program.sample_paths();
+                            let path_refs: Vec<&str> = sample_paths.to_vec();
+                            let config = CopyConfig {
+                                search_dir: search,
+                                output_dir: out,
+                                sample_paths: &path_refs,
+                            };
+                            let report = copy_samples(&config);
+                            Some(report.summary())
+                        } else {
+                            None
+                        };
+
+                        let message = if final_success {
+                            format!("Converted to {} format", match format {
+                                OutputFormat::Sfz => "SFZ",
+                                OutputFormat::DecentSampler => "Decent Sampler",
+                            })
+                        } else {
+                            write_result.err().unwrap_or_else(|| "Unknown error".to_string())
+                        };
+
+                        ConversionResult {
+                            input_file: file_path.clone(),
+                            output_file: if final_success { Some(output_file) } else { None },
+                            success: final_success,
+                            message,
+                            sample_summary,
                         }
-                    };
-
-                    let write_result = if let Ok(content) = &conversion_result {
-                        std::fs::write(&output_file, content).map_err(|e| e.to_string())
-                    } else {
-                        Err("Conversion failed".to_string())
-                    };
-
-                    let final_success = write_result.is_ok();
-                    let message = if final_success {
-                        format!("Converted to {} format", match format {
-                            OutputFormat::Sfz => "SFZ",
-                            OutputFormat::DecentSampler => "Decent Sampler",
-                        })
-                    } else {
-                        write_result.err().unwrap_or_else(|| "Unknown error".to_string())
-                    };
-
-                    ConversionResult {
-                        input_file: file_path.clone(),
-                        output_file: if final_success { Some(output_file) } else { None },
-                        success: final_success,
-                        message,
                     }
-                } else {
-                    ConversionResult {
-                        input_file: file_path.clone(),
-                        output_file: None,
-                        success: false,
-                        message: conversion_result.err().unwrap_or_else(|| "Unknown conversion error".to_string()),
+                    Err(e) => {
+                        ConversionResult {
+                            input_file: file_path.clone(),
+                            output_file: None,
+                            success: false,
+                            message: e,
+                            sample_summary: None,
+                        }
                     }
                 };
 

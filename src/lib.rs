@@ -4,15 +4,24 @@ pub mod parser;
 pub mod sfz;
 pub mod dspreset;
 pub mod validate;
+pub mod samples;
 
 pub use error::{AkpError, Result};
 pub use types::{AkaiProgram, OutputFormat};
 pub use parser::{validate_riff_header, parse_top_level_chunks};
+pub use samples::{copy_samples, CopyConfig, CopyReport, SampleResult};
 
 use std::path::Path;
 
-/// Conversion function for GUI use
+/// Conversion function for GUI use — returns only the output string.
 pub fn convert_file(input_path: &Path, format: OutputFormat) -> std::result::Result<String, String> {
+    let (output, _program) = convert_file_with_program(input_path, format)?;
+    Ok(output)
+}
+
+/// Like `convert_file()` but also returns the parsed `AkaiProgram`,
+/// so callers can access `sample_paths()` for sample copying.
+pub fn convert_file_with_program(input_path: &Path, format: OutputFormat) -> std::result::Result<(String, AkaiProgram), String> {
     use std::fs::File;
 
     let mut file = File::open(input_path)
@@ -35,5 +44,5 @@ pub fn convert_file(input_path: &Path, format: OutputFormat) -> std::result::Res
         OutputFormat::DecentSampler => program.to_dspreset_string(),
     };
 
-    Ok(output)
+    Ok((output, program))
 }

@@ -20,9 +20,11 @@ The library is split into focused modules under `src/`:
 
 - **Decent Sampler generator** (`src/dspreset.rs`): `impl AkaiProgram { to_dspreset_string() }` — converts to Decent Sampler XML with UI controls (ADSR, filter, resonance knobs), effects chain, LFO modulators, and MIDI CC routing.
 
-- **Library root** (`src/lib.rs`): Module declarations, re-exports (`AkpError`, `Result`, `AkaiProgram`, `OutputFormat`, `validate_riff_header`, `parse_top_level_chunks`), and `convert_file()` convenience function for GUI integration.
+- **Sample copier** (`src/samples.rs`): `copy_samples()` with `CopyConfig`, `CopyReport`, `SampleResult` types. Case-insensitive file resolution, subdirectory creation, `.wav` extension appending. Non-blocking on missing samples.
 
-- **CLI binary** (`src/bin/cli.rs`): Command-line interface using `clap` derive for argument parsing. Supports single-file conversion, `--format` option, `--batch` directory mode, and progress bars via `indicatif`.
+- **Library root** (`src/lib.rs`): Module declarations, re-exports (`AkpError`, `Result`, `AkaiProgram`, `OutputFormat`, `validate_riff_header`, `parse_top_level_chunks`, `copy_samples`, `CopyConfig`, `CopyReport`, `SampleResult`), `convert_file()` and `convert_file_with_program()` convenience functions.
+
+- **CLI binary** (`src/bin/cli.rs`): Command-line interface using `clap` derive for argument parsing. Supports single-file conversion, `--format` option, `--batch` directory mode, `--copy-samples` with optional `--sample-dir`, and progress bars via `indicatif`.
 
 - **GUI application** (`gui/src/main.rs`): Separate crate using `eframe`/`egui`. Clickable drop zone with hover feedback, format selection using `rusty_samplers::OutputFormat` directly, custom output directory option, real-time progress tracking in bottom bar, threaded conversion.
 
@@ -37,6 +39,7 @@ rusty-samplers/
 │   ├── parser.rs            # RIFF/APRG parsing functions + parser unit tests
 │   ├── sfz.rs               # SFZ generation + SFZ unit tests
 │   ├── dspreset.rs          # Decent Sampler XML generation
+│   ├── samples.rs           # Sample file copying + case-insensitive resolution
 │   └── bin/
 │       └── cli.rs           # CLI binary (rusty-samplers-cli)
 ├── gui/                     # GUI application (separate crate)
@@ -64,6 +67,8 @@ rusty-samplers/
 - `cargo run --bin rusty-samplers-cli -- <file.akp>`: Convert single AKP to SFZ
 - `cargo run --bin rusty-samplers-cli -- --format ds <file.akp>`: Convert to Decent Sampler
 - `cargo run --bin rusty-samplers-cli -- --batch <directory>`: Batch convert directory
+- `cargo run --bin rusty-samplers-cli -- --copy-samples <file.akp>`: Convert and copy referenced WAVs
+- `cargo run --bin rusty-samplers-cli -- --copy-samples --sample-dir /path/to/wavs <file.akp>`: Custom sample source
 - `cd gui && cargo run`: Launch the GUI
 
 ### Test
